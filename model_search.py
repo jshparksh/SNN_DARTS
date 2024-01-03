@@ -59,19 +59,18 @@ class Cell(nn.Module):
                 op = MixedOp(C, stride)
                 self._ops.append(op)
 
-    def forward(self, s0, s1, weights,weights2):
+    def forward(self, s0, s1, weights):
         s0 = self.preprocess0(s0)
         s1 = self.preprocess1(s1)
 
         states = [s0, s1]
         offset = 0
         for i in range(self._steps):
-            s = sum(weights2[offset+j].to(self._ops[offset+j](h, weights[offset+j]).device)*self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
-            #s = channel_shuffle(s,4)
+            s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
             offset += len(states)
             states.append(s)
 
-        return torch.cat(states[-self._multiplier:], dim=1)
+        return torch.cat(states[-self._multiplier:], dim=1) # or change into add
 
 
 class Network(nn.Module):
@@ -127,49 +126,26 @@ class Network(nn.Module):
         return model_new
 
     def forward(self, input):
-        s0 = self.stem0(input)
-        s1 = self.stem1(s0)
+        s0 = s1 = self.stem(input)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
                 weights = F.softmax(self.alphas_reduce, dim=-1)
-                n = 3
-                start = 2
-                weights2 = F.softmax(self.betas_reduce[0:2], dim=-1)
-                for i in range(self._steps-1):
-                    end = start + n
-                    tw2 = F.softmax(self.betas_reduce[start:end], dim=-1)
-                    start = end
-                    n += 1
-                    weights2 = torch.cat([weights2,tw2],dim=0)
             else:
                 weights = F.softmax(self.alphas_normal, dim=-1)
-                n = 3
-                start = 2
-                weights2 = F.softmax(self.betas_normal[0:2], dim=-1)
-                for i in range(self._steps-1):
-                    end = start + n
-                    tw2 = F.softmax(self.betas_normal[start:end], dim=-1)
-                    start = end
-                    n += 1
-                    weights2 = torch.cat([weights2,tw2],dim=0)
-            s0, s1 = s1, cell(s0, s1, weights,weights2)
+            s0, s1 = s1, cell(s0, s1, weights)
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
         return logits
-
-    def _loss(self, input, target):
-        logits = self(input)
-        return self._criterion(logits, target) 
 
     def _initialize_alphas(self):
         k = sum(1 for i in range(self._steps) for n in range(2+i))
         num_ops = len(PRIMITIVES)
 
-        self.alphas_normal = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
-        self.alphas_reduce = Variable(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+        self.alphas_normal = nn.Parameter(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
+        self.alphas_reduce = nn.Parameter(1e-3*torch.randn(k, num_ops).cuda(), requires_grad=True)
         self._arch_parameters = [
-        self.alphas_normal,
-        self.alphas_reduce
+            self.alphas_normal,
+            self.alphas_reduce
         ]
 
     def arch_parameters(self):
@@ -184,9 +160,6 @@ class Network(nn.Module):
             for i in range(self._steps):
                 end = start + n
                 W = weights[start:end].copy()
-                W2 = weights2[start:end].copy()
-                for j in range(n):
-                    W[j,:] = W[j,:]*W2[j]
                 edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
                 
                 #edges = sorted(range(i + 2), key=lambda x: -W2[x])[:2]
@@ -201,26 +174,13 @@ class Network(nn.Module):
                 n += 1
             return gene
         
-        n = 3
-        start = 2
-        weightsr2 = F.softmax(self.betas_reduce[0:2], dim=-1)
-        weightsn2 = F.softmax(self.betas_normal[0:2], dim=-1)
-        for i in range(self._steps-1):
-            end = start + n
-            #print(self.betas_reduce[start:end])
-            tw2 = F.softmax(self.betas_reduce[start:end], dim=-1)
-            tn2 = F.softmax(self.betas_normal[start:end], dim=-1)
-            start = end
-            n += 1
-            weightsr2 = torch.cat([weightsr2,tw2],dim=0)
-            weightsn2 = torch.cat([weightsn2,tn2],dim=0)
-        gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy(),weightsn2.data.cpu().numpy())
-        gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy(),weightsr2.data.cpu().numpy())
+        gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy())
+        gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy())
 
         concat = range(2+self._steps-self._multiplier, self._steps+2)
         genotype = Genotype(
-        normal=gene_normal, normal_concat=concat,
-        reduce=gene_reduce, reduce_concat=concat
+            normal=gene_normal, normal_concat=concat,
+            reduce=gene_reduce, reduce_concat=concat
         )
         return genotype
 
