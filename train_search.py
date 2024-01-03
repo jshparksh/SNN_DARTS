@@ -5,7 +5,6 @@ import glob
 import numpy as np
 import torch
 import utils
-import logger
 import argparse
 import torch.nn as nn
 import torch.utils
@@ -75,10 +74,11 @@ def main():
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, 
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-        shuffle=True, pin_memory=True, num_workers=args.workers)
+        pin_memory=True, num_workers=args.workers)
 
     valid_queue = torch.utils.data.DataLoader(
-        train_data, batch_size=args.batch_size, shuffle=True,
+        train_data, batch_size=args.batch_size,
+        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:n_train]),
         pin_memory=True, num_workers=args.workers)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -107,10 +107,10 @@ def main():
         logger.info(F.softmax(arch_param[1], dim=-1))
         
         # training
-        train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr,epoch)
+        train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr, epoch)
         
         # validation
-        valid_acc, valid_obj = infer(valid_queue, model, criterion)
+        valid_acc, valid_obj = infer(valid_queue, model, epoch, criterion)
         #test_acc, test_obj = infer(test_queue, model, criterion)
         logger.info('Valid_acc %f', valid_acc)
         #logger.info('Test_acc %f', test_acc)
@@ -118,10 +118,10 @@ def main():
         #utils.save(model, os.path.join(args.save, 'weights.pt'))
 
 def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr, epoch):
-    losses = utils.AvgrageMeter()
-    arc_losses = utils.AvgrageMeter()
-    top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
+    losses = utils.AverageMeter()
+    arc_losses = utils.AverageMeter()
+    top1 = utils.AverageMeter()
+    top5 = utils.AverageMeter()
 
     for step, (input, target) in enumerate(train_queue):
         model.train()
@@ -147,8 +147,9 @@ def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr
             loss_a.backward()
             nn.utils.clip_grad_norm_(model.module.arch_parameters(), args.grad_clip)
             optimizer_a.step()
-        #architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
-
+            
+            arc_losses.update(loss_a.data.item(), n)
+            
         optimizer.zero_grad()
         logits = model(input)
         loss = criterion(logits, target)
@@ -162,15 +163,21 @@ def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         losses.update(loss.data.item(), n)
-        arc_losses.update(loss_a.data.item(), n)
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
 
-        if step % args.report_freq == 0:
-            logger.info(
+        if step % args.print_freq == 0:
+            if epoch >= args.begin:
+                logger.info(
                     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Arc_Loss {arc_losses.avg:.3f}"
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, arc_losses=arc_losses, 
+                        top1=top1, top5=top5))
+            else:
+                logger.info(
+                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f}"
+                    "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                        epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
 
     logger.info("Train: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
@@ -178,9 +185,9 @@ def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr
 
 
 def infer(valid_queue, model, epoch, criterion):
-    losses = utils.AvgrageMeter()
-    top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
+    losses = utils.AverageMeter()
+    top1 = utils.AverageMeter()
+    top5 = utils.AverageMeter()
     model.eval()
 
     for step, (input, target) in enumerate(valid_queue):
@@ -196,7 +203,7 @@ def infer(valid_queue, model, epoch, criterion):
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
 
-        if step % args.report_freq == 0:
+        if step % args.print_freq == 0:
             logger.info(
                     "Valid: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} "
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(

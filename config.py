@@ -62,6 +62,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
         parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
         parser.add_argument('--begin', type=int, default=15, help='batch size') # imagenet -> 35
+        parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
 
         return parser
 
@@ -98,6 +99,7 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
         parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path prob')
+        parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
 
         return parser
 

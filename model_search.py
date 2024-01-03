@@ -5,6 +5,7 @@ from operations import *
 from torch.autograd import Variable
 from genotypes import PRIMITIVES
 from genotypes import Genotype
+from quantization import *
 
 def channel_shuffle(x, groups):
     batchsize, num_channels, height, width = x.data.size()
@@ -41,15 +42,15 @@ class Cell(nn.Module):
     def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
         super(Cell, self).__init__()
         self.reduction = reduction
-        self._steps = steps
-        self._multiplier = multiplier
         
         if reduction_prev:
             self.preprocess0 = FactorizedReduce(C_prev_prev, C, affine=False)
         else:
             self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0, affine=False)
+            
         self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=False)
-        
+        self._steps = steps
+        self._multiplier = multiplier
 
         self._ops = nn.ModuleList()
         self._bns = nn.ModuleList()
@@ -70,8 +71,7 @@ class Cell(nn.Module):
             offset += len(states)
             states.append(s)
 
-        return torch.cat(states[-self._multiplier:], dim=1) # or change into add
-
+        return torch.cat(states[-self._multiplier:], dim=1)
 
 class Network(nn.Module):
 
@@ -85,30 +85,23 @@ class Network(nn.Module):
         self._multiplier = multiplier
 
         C_curr = stem_multiplier*C
-        self.stem0 = nn.Sequential(
-        nn.Conv2d(3, C_curr // 2, kernel_size=3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(C_curr // 2),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(C_curr // 2, C_curr, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(C_curr),
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, C_curr, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(C_curr),
+            PACT()
         )
-
-        self.stem1 = nn.Sequential(
-        nn.ReLU(inplace=True),
-        nn.Conv2d(C_curr, C_curr, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(C_curr),
-        )
-
     
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
+        
         self.cells = nn.ModuleList()
-        reduction_prev = True
+        reduction_prev = False
         for i in range(layers):
             if i in [layers//3, 2*layers//3]:
                 C_curr *= 2
                 reduction = True
             else:
                 reduction = False
+                
             cell = Cell(steps, multiplier, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
             reduction_prev = reduction
             self.cells += [cell]
@@ -153,7 +146,7 @@ class Network(nn.Module):
 
     def genotype(self):
 
-        def _parse(weights,weights2):
+        def _parse(weights):
             gene = []
             n = 2
             start = 0
