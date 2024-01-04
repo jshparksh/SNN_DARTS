@@ -6,17 +6,18 @@ from quantization import PACT, PACT_with_log_quantize
 
 args = SearchConfig()
 
+# v = sqrt
 OPS = {
     'none' : lambda C, stride, affine: Zero(stride),
-    'max_pool_3x3_4root2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
-    'max_pool_3x3_root2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(2), time_step=args.timestep),
+    'max_pool_3x3_4v2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
+    'max_pool_3x3_v2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(2), time_step=args.timestep),
     'skip_connect' : lambda C, stride, affine: Identity() if stride == 1 else FactorizedReduce(C, C, base=math.sqrt(2), time_step=args.timestep, affine=affine),
-    'conv_3x3_4root2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
-    'conv_3x3_root2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
-    'sep_conv_3x3_4root2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
-    'sep_conv_3x3_root2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_4root2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_root2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(2), time_step=args.timestep, affine=affine)
+    'conv_3x3_4v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'conv_3x3_v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'sep_conv_3x3_4v2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'sep_conv_3x3_v2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'dil_conv_3x3_4v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'dil_conv_3x3_v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(2), time_step=args.timestep, affine=affine)
 }
 
 class ReLUConvBN(nn.Module):

@@ -4,15 +4,15 @@ Genotype = namedtuple('Genotype', 'normal normal_concat reduce reduce_concat')
 
 PRIMITIVES = [
     'none',
-    'max_pool_3x3_4root2',
-    'max_pool_3x3_root2',
+    'max_pool_3x3_4v2',
+    'max_pool_3x3_v2',
     'skip_connect',
-    'conv_3x3_4root2',
-    'conv_3x3_root2',
-    'sep_conv_3x3_4root2',
-    'sep_conv_3x3_root2',
-    'dil_conv_3x3_4root2',
-    'dil_conv_3x3_root2'
+    'conv_3x3_4v2',
+    'conv_3x3_v2',
+    'sep_conv_3x3_4v2',
+    'sep_conv_3x3_v2',
+    'dil_conv_3x3_4v2',
+    'dil_conv_3x3_v2'
 ]
 
 NASNet = Genotype(
