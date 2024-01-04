@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from torch.autograd.function import InplaceFunction
 from torch.autograd import Variable
@@ -16,12 +17,12 @@ class pact_function(InplaceFunction):
     # See https://github.com/obilaniu/GradOverride/blob/master/functional.py
     # See https://arxiv.org/pdf/1805.06085.pdf
     @staticmethod
-    def forward(ctx, x, alpha):
+    def forward(ctx, x, alpha, base, time_step):
         ctx.save_for_backward(x, alpha)
         # tensor.clamp(min=0., max=alpha) <- alpha is parameter (torch.tensor) 
         # clamp min, max should not be tensor, so use tensor.min(alpha)
         """same to : PACT function y = 0.5 * (torch.abs(x) - torch.abs(x - alpha) + alpha)"""
-        return x.clamp(min=0.).min(alpha), alpha
+        return x.clamp(min=base**(-time_step-2)).min(alpha), alpha
         
     @staticmethod
     def backward(ctx, grad_output):
@@ -47,9 +48,9 @@ class log_quantize(InplaceFunction):
         ctx.save_for_backward(x)
         x = x / scale
         log_value = torch.log(x)/torch.log(torch.tensor(base))
-        round = torch.where(log_value <= -1, torch.round(log_value), -1)
+        round = torch.where(log_value <= -1, torch.round(log_value), torch.tensor(-1, dtype=torch.float32).cuda())
         
-        return torch.where(round >= -time_step, base**round, 0) * scale
+        return torch.where(round >= -time_step, base**round, torch.tensor(0, dtype=torch.float32).cuda()) * scale
     
     @staticmethod
     def backward(ctx, grad_output):
@@ -64,7 +65,9 @@ class PACT(nn.Module):
         self.relu = nn.ReLU(inplace=False)
     def forward(self, input):
         input = self.relu(input)
-        return pact_function.apply(input, self.alpha)
+        
+        qinput, _ = pact_function.apply(input, self.alpha, 0, -3)
+        return qinput
     
 class PACT_with_log_quantize(nn.Module):
     def __init__(self, base, time_step, alpha=5.):
@@ -76,7 +79,7 @@ class PACT_with_log_quantize(nn.Module):
     
     def forward(self, input):
         input = self.relu(input)
-        qinput, scale = pact_function.apply(input, self.alpha)
+        qinput, scale = pact_function.apply(input, self.alpha, self.base, self.time_step)
         qinput = log_quantize.apply(qinput, self.base, self.time_step, scale)
         
         return qinput

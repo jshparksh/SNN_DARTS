@@ -1,21 +1,22 @@
 import torch
 import torch.nn as nn
-from quantization import *
+import math
 from config import SearchConfig
+from quantization import PACT, PACT_with_log_quantize
 
 args = SearchConfig()
 
 OPS = {
     'none' : lambda C, stride, affine: Zero(stride),
-    'max_pool_3x3_1.25' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=1.25, time_step=args.timestep),
-    'max_pool_3x3_1.5' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=1.5, time_step=args.timestep),
-    'skip_connect' : lambda C, stride, affine: Identity() if stride == 1 else FactorizedReduce(C, C, affine=affine),
-    'conv_3x3_1.25' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=1.25, time_step=args.timestep, affine=affine),
-    'conv_3x3_1.5' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=1.5, time_step=args.timestep, affine=affine),
-    'sep_conv_3x3_1.25' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=1.25, time_step=args.timestep, affine=affine),
-    'sep_conv_3x3_1.5' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=1.5, time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_1.25' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=1.25, time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_1.5' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=1.5, time_step=args.timestep, affine=affine)
+    'max_pool_3x3_1.25' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
+    'max_pool_3x3_1.5' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(2), time_step=args.timestep),
+    'skip_connect' : lambda C, stride, affine: Identity() if stride == 1 else FactorizedReduce(C, C, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'conv_3x3_1.25' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'conv_3x3_1.5' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'sep_conv_3x3_1.25' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'sep_conv_3x3_1.5' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'dil_conv_3x3_1.25' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'dil_conv_3x3_1.5' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(2), time_step=args.timestep, affine=affine)
 }
 
 class ReLUConvBN(nn.Module):
@@ -129,17 +130,17 @@ class FactorizedReduce(nn.Module):
         self.relu = nn.ReLU(inplace=False)
         self.conv_1 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
-            nn.BatchNorm2d(C_out // 2, affine=affine),
             PACT_with_log_quantize(base, time_step)
         )
         self.conv_2 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
-            nn.BatchNorm2d(C_out // 2, affine=affine),
             PACT_with_log_quantize(base, time_step)
         )
+        self.bn = nn.BatchNorm2d(C_out, affine=affine)
 
     def forward(self, x):
         x = self.relu(x)
         out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:])], dim=1)
+        out = self.bn(out)
         return out
 
