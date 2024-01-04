@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 from operations import *
 from torch.autograd import Variable
 from genotypes import PRIMITIVES
@@ -36,6 +37,7 @@ class MixedOp(nn.Module):
             self._ops.append(op)
 
     def forward(self, x, weights):
+        
         return sum(w * op(x) for w, op in zip(weights, self._ops))
     
     #return sum(w.to(x.device) * op(x) for w, op in zip(weights, self._ops))

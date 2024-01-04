@@ -16,8 +16,8 @@ OPS = {
     'conv_3x3_v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
     'sep_conv_3x3_4v2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
     'sep_conv_3x3_v2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_4v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
-    'dil_conv_3x3_v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 1, 2, base=math.sqrt(2), time_step=args.timestep, affine=affine)
+    'dil_conv_3x3_4v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 2, 2, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
+    'dil_conv_3x3_v2' : lambda C, stride, affine: DilConv(C, C, 3, stride, 2, 2, base=math.sqrt(2), time_step=args.timestep, affine=affine)
 }
 
 class ReLUConvBN(nn.Module):
@@ -73,7 +73,7 @@ class DilConv(nn.Module):
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_in, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, groups=C_in, bias=False),
             PACT_with_log_quantize(base, time_step),
-            nn.Conv2d(C_in, C_out, kernel_size=1, padding=0, bias=False),
+            nn.Conv2d(C_in, C_out, kernel_size=1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
             PACT_with_log_quantize(base, time_step)
             )
@@ -131,17 +131,16 @@ class FactorizedReduce(nn.Module):
         self.relu = nn.ReLU(inplace=False)
         self.conv_1 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
+            nn.BatchNorm2d(C_out // 2, affine=affine),
             PACT_with_log_quantize(base, time_step)
         )
         self.conv_2 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
+            nn.BatchNorm2d(C_out // 2, affine=affine),
             PACT_with_log_quantize(base, time_step)
         )
-        self.bn = nn.BatchNorm2d(C_out, affine=affine)
 
     def forward(self, x):
         x = self.relu(x)
         out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:])], dim=1)
-        out = self.bn(out)
         return out
-
