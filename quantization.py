@@ -65,7 +65,6 @@ class PACT(nn.Module):
         self.relu = nn.ReLU(inplace=False)
     def forward(self, input):
         input = self.relu(input)
-        
         qinput, _ = pact_function.apply(input, self.alpha, 0, -3)
         return qinput
     
