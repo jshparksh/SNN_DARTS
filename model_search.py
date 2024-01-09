@@ -37,8 +37,9 @@ class MixedOp(nn.Module):
             self._ops.append(op)
 
     def forward(self, x, weights):
+        self.ofms = [op(x) for op in self._ops]
         
-        return sum(w * op(x) for w, op in zip(weights, self._ops))
+        return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
     #return sum(w.to(x.device) * op(x) for w, op in zip(weights, self._ops))
 
@@ -181,4 +182,3 @@ class Network(nn.Module):
             reduce=gene_reduce, reduce_concat=concat
         )
         return genotype
-

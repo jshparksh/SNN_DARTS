@@ -17,6 +17,7 @@ from tensorboardX import SummaryWriter
 from config import SearchConfig
 from torch.autograd import Variable
 from model_search import Network
+from architect import Architect
 
 args = SearchConfig()
 
@@ -62,10 +63,6 @@ def main():
         momentum=args.momentum,
         weight_decay=args.weight_decay)
     
-    optimizer_a = torch.optim.Adam(model.module.arch_parameters(),
-               lr=args.arch_learning_rate, betas=(0.5, 0.999), 
-               weight_decay=args.arch_weight_decay)
-
     # split data to train/validation
     n_train = len(train_data)
     split = n_train // 2
@@ -84,6 +81,8 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, args.epochs, eta_min=args.learning_rate_min)
 
+    architect = Architect(model, criterion, args)
+    
     # training loop
     lr = args.learning_rate
     for epoch in range(args.epochs):
