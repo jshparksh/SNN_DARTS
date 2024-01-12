@@ -32,17 +32,31 @@ class MixedOp(nn.Module):
     def __init__(self, C, stride):
         super(MixedOp, self).__init__()
         self._ops = nn.ModuleList()
+        
         for primitive in PRIMITIVES:
             op = OPS[primitive](C, stride, False)
             self._ops.append(op)
 
     def forward(self, x, weights):
+        # fix me : can get flops, spike_rate, time_neuron from each operation in list format
+        # iteration to get each operation's flops, spike_rate, time_neuron, and calculate energy and return as summed value
         self.ofms = [op(x) for op in self._ops]
         
         return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
-    #return sum(w.to(x.device) * op(x) for w, op in zip(weights, self._ops))
-
+    def _calculate_op_energy(self, alphas):
+        alpha_flops_spikerate = 0
+        alpha_time_neuron = 0
+        for op_idx in range(len(self._ops)):
+            spike_data = self._ops[op_idx].spike_datas() # spike_data = [flops, spike_rate, time_neuron]
+            op_alpha = alphas[op_idx]
+            alpha_flops_spikerate += op_alpha * spike_data[0] * spike_data[1]
+            alpha_time_neuron += op_alpha * spike_data[2]
+        self.op_e_add = 0.03 * alpha_flops_spikerate
+        self.op_e_neuron = 0.26 * alpha_time_neuron
+        
+        return self.op_e_add, self.op_e_neuron
+    
 class Cell(nn.Module):
 
     def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
@@ -57,7 +71,8 @@ class Cell(nn.Module):
         self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=False)
         self._steps = steps
         self._multiplier = multiplier
-
+        self.cell_e_add = 0
+        self.cell_e_neuron = 0
         self._ops = nn.ModuleList()
         self._bns = nn.ModuleList()
         for i in range(self._steps):
@@ -76,8 +91,16 @@ class Cell(nn.Module):
             s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
             offset += len(states)
             states.append(s)
-
+    
         return torch.cat(states[-self._multiplier:], dim=1)
+    
+    def _calculate_cell_energy(self, alphas):
+        for op in self._ops:
+            op_e_add, op_e_neuron = op._calculate_op_energy(alphas)
+            self.cell_e_add += op_e_add
+            self.cell_e_neuron += op_e_neuron
+        
+        return self.cell_e_add, self.cell_e_neuron
 
 class Network(nn.Module):
 
@@ -89,14 +112,13 @@ class Network(nn.Module):
         self._criterion = criterion
         self._steps = steps
         self._multiplier = multiplier
-
         C_curr = stem_multiplier*C
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, 1, 1, bias=False),
             nn.BatchNorm2d(C_curr),
             PACT()
         )
-    
+        
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
         
         self.cells = nn.ModuleList()
@@ -182,3 +204,19 @@ class Network(nn.Module):
             reduce=gene_reduce, reduce_concat=concat
         )
         return genotype
+    
+    def _spike_energy(self):
+        self.E_add = 0
+        self.E_neuron = 0
+        for i in range(self.layers):
+            if i in [self.layers//3, 2*self.layers//3]:
+                reduction = True
+            else:
+                reduction = False
+            cell_e_add, cell_e_neuron = self.cells[i]._calculate_cell_energy(self.alphas_reduce if reduction else self.alphas_normal)
+            self.E_add += cell_e_add
+            self.E_neuron += cell_e_neuron
+        return self.E_add + self.E_neuron
+        
+            
+            
