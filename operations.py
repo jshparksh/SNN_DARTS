@@ -46,6 +46,9 @@ class AvgPool(nn.Module):
         )
         self.base = base
         self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
     
     def forward(self, x):
         self.num_ifm = [torch.numel(x)]
@@ -54,9 +57,9 @@ class AvgPool(nn.Module):
         return self.ofms
 
     def spike_datas(self):
-        self.scale = [self.op[1].scale]
+        self.scale = [self.op[1].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(self.ofms/self.scale)/torch.log(torch.tensor(self.base))]
+        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]
 
 class MaxPool(nn.Module):
@@ -68,6 +71,9 @@ class MaxPool(nn.Module):
         )
         self.base = base
         self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
         
     def forward(self, x):
         self.num_ifm = [torch.numel(x)]
@@ -76,9 +82,9 @@ class MaxPool(nn.Module):
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].scale]
+        self.scale = [self.op[1].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(self.ofms/self.scale)/torch.log(torch.tensor(self.base))]
+        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class Conv(nn.Module):
@@ -94,6 +100,10 @@ class Conv(nn.Module):
         self.C_out = C_out
         self.kernel_size = kernel_size
         self.stride = stride
+        self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
         
     def forward(self, x):
         self.flops = [self.kernel_size * self.kernel_size * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2]
@@ -103,9 +113,9 @@ class Conv(nn.Module):
         return self.op(x)
     
     def spike_datas(self):
-        self.scale = [self.op[2].scale]
+        self.scale = [self.op[2].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(self.ofms/self.scale)/torch.log(torch.tensor(self.base))]
+        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class DilConv(nn.Module):
@@ -124,17 +134,21 @@ class DilConv(nn.Module):
         self.C_out = C_out
         self.kernel_size = kernel_size
         self.stride = stride
+        self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
         
     def forward(self, x):
         self.flops = [(self.kernel_size * self.kernel_size * self.C_in * self.C_in * x.size()[2] * x.size()[3] / self.stride ** 2 / self.C_in), # grouped conv -> FLOPS should be devided
                     (1 * 1 * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2)]
         self.num_ifm = [torch.numel(x), torch.numel(self.op[0](x))]
         self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0](x))]
-        self.ofms = [self.op[0](x), self.op(x)]
+        self.ofms = [self.op[0:2](x), self.op(x)]
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].scale, self.op[4].scale]
+        self.scale = [self.op[1].alpha, self.op[4].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]
@@ -160,6 +174,10 @@ class SepConv(nn.Module):
         self.C_out = C_out
         self.kernel_size = kernel_size
         self.stride = stride
+        self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
         
     def forward(self, x):
         self.flops = [(self.kernel_size * self.kernel_size * self.C_in * self.C_in * x.size()[2] * x.size()[3] / self.stride ** 2 / self.C_in), # grouped conv -> FLOPS should be devided
@@ -168,11 +186,11 @@ class SepConv(nn.Module):
                     (1 * 1 * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2)]
         self.num_ifm = [torch.numel(x), torch.numel(self.op[0](x)), torch.numel(self.op[0:3](x)), torch.numel(self.op[0:6](x))]
         self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0](x)), torch.count_nonzero(self.op[0:3](x)), torch.count_nonzero(self.op[0:6](x))]
-        self.ofms = [self.op[0](x), self.op[0:3](x), self.op[0:6](x), self.op(x)]
+        self.ofms = [self.op[0:2](x), self.op[0:5](x), self.op[0:7](x), self.op(x)]
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].scale, self.op[4].scale, self.op[6].scale, self.op[9].scale]
+        self.scale = [self.op[1].alpha, self.op[4].alpha, self.op[6].alpha, self.op[9].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]
@@ -181,14 +199,14 @@ class Identity(nn.Module):
 
     def __init__(self):
         super(Identity, self).__init__()
-        self.flops = 0
         
     def forward(self, x):
+        self.device = x.device
         return x
     
     def spike_datas(self):
         # assume input is output of spike neuron -> no need to calculate
-        return [0, 0, 0]
+        return [[0], [0], [torch.tensor(0, dtype=torch.float32, requires_grad=True).to(self.device)]]
 
 
 class Zero(nn.Module):
@@ -196,15 +214,15 @@ class Zero(nn.Module):
     def __init__(self, stride):
         super(Zero, self).__init__()
         self.stride = stride
-        self.flops = 0
         
     def forward(self, x):
+        self.device = x.device
         if self.stride == 1:
             return x.mul(0.)
         return x[:,:,::self.stride,::self.stride].mul(0.)
     
     def spike_datas(self):
-        return [0, 0, 0]
+        return [[0], [0], [torch.tensor(0, dtype=torch.float32, requires_grad=True).to(self.device)]]
 
 
 class FactorizedReduce(nn.Module):
@@ -226,6 +244,10 @@ class FactorizedReduce(nn.Module):
         self.base = base
         self.C_in = C_in
         self.C_out = C_out
+        self.flops = [0]
+        self.num_ifm = [1]
+        self.non_zero_ifm = [0]
+        self.ofms = [torch.tensor(1)]
         
     def forward(self, x):
         x = self.relu(x)
@@ -234,12 +256,11 @@ class FactorizedReduce(nn.Module):
         self.num_ifm = [torch.numel(self.conv_1[0](x)), torch.numel(self.conv_2[0](x))]
         self.non_zero_ifm = [torch.count_nonzero(self.conv_1[0](x)), torch.count_nonzero(self.conv_2[0](x))]
         self.ofms = [self.conv_1(x), self.conv_2(x)]
-        
         out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:])], dim=1)
         return out
 
     def spike_datas(self):
-        self.scale = [self.conv_1[2].scale, self.conv_2[2].scale]
+        self.scale = [self.conv_1[2].alpha, self.conv_2[2].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
         return [self.flops, self.spike_rate, self.time_neuron]

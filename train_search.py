@@ -105,20 +105,29 @@ def main():
         logger.info(F.softmax(arch_param[0], dim=-1))
         logger.info(F.softmax(arch_param[1], dim=-1))
         
+        if epoch == args.begin:
+            logger.info('Begin architect search')
+            
+        if epoch == args.spike_step:
+            logger.info('Begin spike-aware search')
+            
         # training
-        train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr, epoch)
+        train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, epoch)
         
-        # validation
-        valid_acc, valid_obj = infer(valid_queue, model, epoch, criterion)
-        #test_acc, test_obj = infer(test_queue, model, criterion)
-        logger.info('Valid_acc %f', valid_acc)
+        if epoch >= args.spike_step:
+            # validation
+            valid_acc, valid_obj = infer(valid_queue, model, epoch, criterion)
+            #test_acc, test_obj = infer(test_queue, model, criterion)
+            logger.info('Valid_acc %f', valid_acc)
         #logger.info('Test_acc %f', test_acc)
+        if not os.path.exists(os.path.join(args.path, str(epoch))):
+                os.mkdir(os.path.join(args.path, str(epoch)))
+        utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
 
-        #utils.save(model, os.path.join(args.save, 'weights.pt'))
-
-def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr, epoch):
+def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, epoch):
     losses = utils.AverageMeter()
     arc_losses = utils.AverageMeter()
+    spike_losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
 
@@ -140,15 +149,11 @@ def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr
         
         # after begin epoch, update alpha
         if epoch >= args.begin:
-            optimizer_a.zero_grad()
-            logits = model(input_search)
-            loss_a = criterion(logits, target_search)
-            loss_a.backward()
-            nn.utils.clip_grad_norm_(model.module.arch_parameters(), args.grad_clip)
-            optimizer_a.step()
-            
-            arc_losses.update(loss_a.data.item(), n)
-            
+            architect.step(input_search, target_search, epoch)
+            arc_losses.update(architect.loss.item(), n)
+            if epoch >= args.spike_step:
+                spike_losses.update(architect.spike_loss.item(), n)
+        
         optimizer.zero_grad()
         logits = model(input)
         loss = criterion(logits, target)
@@ -167,14 +172,22 @@ def train(train_queue, valid_queue, model, optimizer, optimizer_a, criterion, lr
 
         if step % args.print_freq == 0:
             if epoch >= args.begin:
-                logger.info(
-                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Arc_Loss {arc_losses.avg:.3f}"
-                    "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                        epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, arc_losses=arc_losses, 
-                        top1=top1, top5=top5))
+                if epoch < args.spike_step:
+                    logger.info(
+                        "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Arc_Loss {arc_losses.avg:.3f} "
+                        "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                            epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, arc_losses=arc_losses,
+                            top1=top1, top5=top5))
+                else:
+                    logger.info(
+                        "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Arc_Loss {arc_losses.avg:.3f} Spike_Loss {spike_losses.avg:.3f} "
+                        "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                            epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, arc_losses=arc_losses, spike_losses=spike_losses,
+                            top1=top1, top5=top5))
+                    
             else:
                 logger.info(
-                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f}"
+                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} "
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))

@@ -48,8 +48,7 @@ class log_quantize(InplaceFunction):
         x = x / scale
         log_value = torch.log(x)/torch.log(torch.tensor(base))
         round = torch.where(log_value <= -1, torch.round(log_value), torch.tensor(-1, dtype=torch.float32).cuda())
-        
-        return torch.where(round >= -time_step, base**round, torch.tensor(0, dtype=torch.float32).cuda()) * scale
+        return torch.where(round >= -time_step, base**round, torch.tensor(base**(-time_step-2), dtype=torch.float32).cuda()) * scale
     
     @staticmethod
     def backward(ctx, grad_output):
@@ -79,5 +78,4 @@ class PACT_with_log_quantize(nn.Module):
         input = self.relu(input)
         qinput, scale = pact_function.apply(input, self.alpha, self.base, self.time_step)
         qinput = log_quantize.apply(qinput, self.base, self.time_step, scale)
-        
         return qinput
