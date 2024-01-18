@@ -32,11 +32,11 @@ class Architect(object):
     def _compute_loss(self, input_valid, target_valid, epoch):
         loss = self.criterion(input_valid, target_valid)
         spike_E = self.model.module._spike_energy()#.mean()
-        print(loss)
         # max_E at initial spike loss calculation for normalization
         if epoch == self.spike_step:
             self.max_E = spike_E
         spike_loss = spike_E/self.max_E.detach() #detach() for double backpropagation
+        print(spike_loss)
         lmd1 = 1/2
         lmd2 = 1/2
         # for logging

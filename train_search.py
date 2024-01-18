@@ -191,7 +191,8 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-
+        if step == 2:
+            break
     logger.info("Train: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
 
 
@@ -221,6 +222,8 @@ def infer(valid_queue, model, epoch, criterion):
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch+1, args.epochs, step, len(valid_queue)-1, losses=losses,
                         top1=top1, top5=top5))
+        if step == 2:
+            break
 
     logger.info("Valid: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
     return top1.avg, losses.avg

@@ -53,13 +53,12 @@ class AvgPool(nn.Module):
     def forward(self, x):
         self.num_ifm = [torch.numel(x)]
         self.non_zero_ifm = [torch.count_nonzero(x)]
-        self.ofms = [self.op(x)]
+        self.ofms = [self.op[1].normed_ofm]
         return self.ofms
 
     def spike_datas(self):
-        self.scale = [self.op[1].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
 
 class MaxPool(nn.Module):
@@ -78,13 +77,12 @@ class MaxPool(nn.Module):
     def forward(self, x):
         self.num_ifm = [torch.numel(x)]
         self.non_zero_ifm = [torch.count_nonzero(x)]
-        self.ofms = [self.op(x)]
+        self.ofms = [self.op[1].normed_ofm]
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class Conv(nn.Module):
@@ -109,13 +107,12 @@ class Conv(nn.Module):
         self.flops = [self.kernel_size * self.kernel_size * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2]
         self.num_ifm = [torch.numel(x)]
         self.non_zero_ifm = [torch.count_nonzero(x)]
-        self.ofms = [self.op(x)]
+        self.ofms = [self.op[2].normed_ofm]
         return self.op(x)
     
     def spike_datas(self):
-        self.scale = [self.op[2].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class DilConv(nn.Module):
@@ -142,15 +139,14 @@ class DilConv(nn.Module):
     def forward(self, x):
         self.flops = [(self.kernel_size * self.kernel_size * self.C_in * self.C_in * x.size()[2] * x.size()[3] / self.stride ** 2 / self.C_in), # grouped conv -> FLOPS should be devided
                     (1 * 1 * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2)]
-        self.num_ifm = [torch.numel(x), torch.numel(self.op[0](x))]
-        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0](x))]
-        self.ofms = [self.op[0:2](x), self.op(x)]
+        self.num_ifm = [torch.numel(x), torch.numel(self.op[0:2](x))]
+        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0:2](x))]
+        self.ofms = [self.op[1].normed_ofm, self.op[4].normed_ofm]
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].alpha, self.op[4].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class SepConv(nn.Module):
@@ -184,15 +180,14 @@ class SepConv(nn.Module):
                     (1 * 1 * self.C_in * self.C_in * x.size()[2] * x.size()[3] / self.stride ** 2 / self.C_in),
                     (self.kernel_size * self.kernel_size * self.C_in * self.C_in * x.size()[2] * x.size()[3] / self.stride ** 2 / self.C_in),
                     (1 * 1 * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2)]
-        self.num_ifm = [torch.numel(x), torch.numel(self.op[0](x)), torch.numel(self.op[0:3](x)), torch.numel(self.op[0:6](x))]
-        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0](x)), torch.count_nonzero(self.op[0:3](x)), torch.count_nonzero(self.op[0:6](x))]
-        self.ofms = [self.op[0:2](x), self.op[0:5](x), self.op[0:7](x), self.op(x)]
+        self.num_ifm = [torch.numel(x), torch.numel(self.op[0:2](x)), torch.numel(self.op[0:5](x)), torch.numel(self.op[0:7](x))]
+        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(self.op[0:2](x)), torch.count_nonzero(self.op[0:5](x)), torch.count_nonzero(self.op[0:7](x))]
+        self.ofms = [self.op[1].normed_ofm, self.op[4].normed_ofm, self.op[6].normed_ofm, self.op[9].normed_ofm]
         return self.op(x)
 
     def spike_datas(self):
-        self.scale = [self.op[1].alpha, self.op[4].alpha, self.op[6].alpha, self.op[9].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class Identity(nn.Module):
@@ -253,14 +248,13 @@ class FactorizedReduce(nn.Module):
         x = self.relu(x)
         self.flops = [(1 * 1 * self.C_in * self.C_out // 2 * x.size()[2] * x.size()[3] / 2 ** 2),
                     (1 * 1 * self.C_in * self.C_out // 2 * x.size()[2] * x.size()[3] / 2 ** 2)]
-        self.num_ifm = [torch.numel(self.conv_1[0](x)), torch.numel(self.conv_2[0](x))]
-        self.non_zero_ifm = [torch.count_nonzero(self.conv_1[0](x)), torch.count_nonzero(self.conv_2[0](x))]
-        self.ofms = [self.conv_1(x), self.conv_2(x)]
+        self.num_ifm = [torch.numel(x), torch.numel(x)]
+        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(x)]
+        self.ofms = [self.conv_1[2].normed_ofm, self.conv_2[2].normed_ofm]
         out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:])], dim=1)
         return out
 
     def spike_datas(self):
-        self.scale = [self.conv_1[2].alpha, self.conv_2[2].alpha]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [-torch.log(ofm/scale)/torch.log(torch.tensor(self.base)) for ofm, scale in zip(self.ofms, self.scale)]
+        self.time_neuron = [-torch.log(ofm)/torch.log(torch.tensor(self.base)) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]

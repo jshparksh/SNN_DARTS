@@ -56,7 +56,7 @@ class MixedOp(nn.Module):
             for i in range(len(spike_data[0])):
                 op_flops += spike_data[0][i]
                 op_spike_rate += spike_data[1][i]
-                op_time_neuron += torch.sum(spike_data[2][i])
+                op_time_neuron += spike_data[2][i]
             alpha_flops_spikerate += op_alpha * op_flops * op_spike_rate
             alpha_time_neuron += op_alpha * op_time_neuron
         self.op_e_add = 0.03 * alpha_flops_spikerate
