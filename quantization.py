@@ -68,7 +68,7 @@ class PACT_with_log_quantize(nn.Module):
     def __init__(self, base, time_step, alpha=5.):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=True)
-        self.normed_ofm = torch.tensor(0, dtype=torch.float32).cuda()
+        self.normed_ofm = torch.tensor(1, dtype=torch.float32).cuda()
         self.relu = nn.ReLU(inplace=False)
         self.base = base
         self.time_step = time_step
@@ -76,7 +76,6 @@ class PACT_with_log_quantize(nn.Module):
     def forward(self, input):
         input = self.relu(input)
         qinput = pact_function.apply(input, self.alpha, self.base, self.time_step)
-        print(qinput)
-        self.normed_ofm = qinput / self.alpha
+        self.normed_ofm = (qinput / self.alpha).clone().detach().requires_grad_(True)
         qinput = log_quantize.apply(self.normed_ofm, self.base, self.time_step, self.alpha)
         return qinput

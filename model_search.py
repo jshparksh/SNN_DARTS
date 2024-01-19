@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 import math
 from operations import *
 from torch.autograd import Variable
@@ -44,24 +45,20 @@ class MixedOp(nn.Module):
         
         return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
-    def _calculate_op_energy(self, alphas):
-        op_flops = 0
-        op_spike_rate = 0
-        op_time_neuron = 0
-        alpha_flops_spikerate = 0
-        alpha_time_neuron = 0
+    def _calculate_op_energy(self):
+        self.flops_spikerate = []
+        self.time_neuron = []
+        
+        # forms should be x*alpha
         for op_idx in range(len(self._ops)):
             spike_data = self._ops[op_idx].spike_datas() # spike_data = [flops, spike_rate, time_neuron]
-            op_alpha = alphas[op_idx]
             for i in range(len(spike_data[0])):
-                op_flops += spike_data[0][i]
-                op_spike_rate += spike_data[1][i]
-                op_time_neuron += spike_data[2][i]
-            alpha_flops_spikerate += op_alpha * op_flops * op_spike_rate
-            alpha_time_neuron += op_alpha * op_time_neuron
-        self.op_e_add = 0.03 * alpha_flops_spikerate
-        self.op_e_neuron = 0.26 * alpha_time_neuron
-        return self.op_e_add, self.op_e_neuron
+                op_flops = np.array(spike_data[0]).sum(axis=0)
+                op_spike_rate = torch.sum(torch.stack(spike_data[1]), dim=0)
+                op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).mean()
+            self.flops_spikerate.append(0.03 * op_flops * op_spike_rate)
+            self.time_neuron.append(0.26 * op_time_neuron)
+        return self.flops_spikerate, self.time_neuron
     
 class Cell(nn.Module):
 

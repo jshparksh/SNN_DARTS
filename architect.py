@@ -36,7 +36,6 @@ class Architect(object):
         if epoch == self.spike_step:
             self.max_E = spike_E
         spike_loss = spike_E/self.max_E.detach() #detach() for double backpropagation
-        print(spike_loss)
         lmd1 = 1/2
         lmd2 = 1/2
         # for logging
