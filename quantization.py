@@ -25,7 +25,7 @@ class pact_function(InplaceFunction):
         return x.clamp(min=base**(-time_step-2)).min(alpha)
         
     @staticmethod
-    def backward(ctx, grad_output): # grad output2 is None
+    def backward(ctx, grad_output):
         x, alpha = ctx.saved_variables
         """
         Same to : grad_input[x < 0] = 0.
@@ -39,7 +39,7 @@ class pact_function(InplaceFunction):
         # Gradient of alpha ( x >= alpha )
         ga        = torch.sum(grad_output*x.ge(alpha).float())
         grad_alpha = grad_output.new([ga])
-        return grad_x, grad_alpha
+        return grad_x, grad_alpha, None, None
 
 class log_quantize(InplaceFunction):
     @staticmethod
@@ -68,7 +68,6 @@ class PACT_with_log_quantize(nn.Module):
     def __init__(self, base, time_step, alpha=5.):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=True)
-        self.normed_ofm = torch.tensor(1, dtype=torch.float32).cuda()
         self.relu = nn.ReLU(inplace=False)
         self.base = base
         self.time_step = time_step

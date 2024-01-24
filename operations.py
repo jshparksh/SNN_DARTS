@@ -66,8 +66,8 @@ class MaxPool(nn.Module):
     def __init__(self, kernel_size, stride, padding, base, time_step):
         super(MaxPool, self).__init__()
         self.op = nn.Sequential(
-        nn.MaxPool2d(kernel_size, stride=stride, padding=padding),
-        PACT_with_log_quantize(base, time_step)
+            nn.MaxPool2d(kernel_size, stride=stride, padding=padding),
+            PACT_with_log_quantize(base, time_step)
         )
         self.base = base
         self.flops = [0]
@@ -206,7 +206,7 @@ class Identity(nn.Module):
     
     def spike_datas(self):
         # assume input is output of spike neuron -> no need to calculate
-        return [[0], [torch.tensor(0)], [torch.zeros(self.tensor_size).cuda()]]
+        return [[0], [torch.tensor(0).cuda()], [torch.zeros(self.tensor_size).cuda()]]
 
 
 class Zero(nn.Module):
@@ -223,7 +223,7 @@ class Zero(nn.Module):
         return x[:,:,::self.stride,::self.stride].mul(0.)
     
     def spike_datas(self):
-        return [[0], [torch.tensor(0)], [torch.zeros(self.tensor_size).cuda()]]
+        return [[0], [torch.tensor(0).cuda()], [torch.zeros(self.tensor_size).cuda()]]
 
 
 class FactorizedReduce(nn.Module):

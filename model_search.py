@@ -45,19 +45,19 @@ class MixedOp(nn.Module):
         
         return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
-    def _calculate_op_energy(self):
-        self.flops_spikerate = []
-        self.time_neuron = []
+    def _calculate_op_energy(self, alphas):
+        self.flops_spikerate = 0
+        self.time_neuron = 0
         
         # forms should be x*alpha
         for op_idx in range(len(self._ops)):
             spike_data = self._ops[op_idx].spike_datas() # spike_data = [flops, spike_rate, time_neuron]
-            for i in range(len(spike_data[0])):
-                op_flops = np.array(spike_data[0]).sum(axis=0)
-                op_spike_rate = torch.sum(torch.stack(spike_data[1]), dim=0)
-                op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).mean()
-            self.flops_spikerate.append(0.03 * op_flops * op_spike_rate)
-            self.time_neuron.append(0.26 * op_time_neuron)
+            op_flops = np.array(spike_data[0]).sum(axis=0) * 1e-6
+            op_spike_rate = torch.sum(torch.stack(spike_data[1]), dim=0)
+            op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).mean()
+            #alphas[op_idx] *= 0.03*op_flops*op_spike_rate + 0.26*op_time_neuron
+            self.flops_spikerate += 0.03 * op_flops * op_spike_rate * alphas[op_idx]
+            self.time_neuron += 0.26 * op_time_neuron * alphas[op_idx]
         return self.flops_spikerate, self.time_neuron
     
 class Cell(nn.Module):
@@ -213,9 +213,9 @@ class Network(nn.Module):
         self.E_add = 0
         self.E_neuron = 0
         for i in range(self._layers):
-            cell_e_add, cell_e_neuron = self.cells[i].cell_e_add, self.cells[i].cell_e_neuron # self.cells[i]._calculate_cell_energy(F.softmax(self.alphas_reduce, dim=-1) if reduction else F.softmax(self.alphas_normal, dim=-1))
-            self.E_add += cell_e_add
-            self.E_neuron += cell_e_neuron
+            Cell_e_add, Cell_e_neuron = self.cells[i].cell_e_add, self.cells[i].cell_e_neuron # self.cells[i]._calculate_cell_energy(F.softmax(self.alphas_reduce, dim=-1) if reduction else F.softmax(self.alphas_normal, dim=-1))
+            self.E_add += Cell_e_add
+            self.E_neuron += Cell_e_neuron
         return self.E_add + self.E_neuron
         
             

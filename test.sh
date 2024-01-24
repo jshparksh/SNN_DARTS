@@ -1,0 +1,1 @@
+python train_search.py --name test --begin 0 --spike_step 0
