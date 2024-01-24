@@ -26,12 +26,12 @@ class Architect(object):
             loss = self.criterion(self.model(input_valid), target_valid)
             self.loss = loss
         else:
-            loss = self._compute_loss(self.model(input_valid), target_valid, epoch)
+            loss = self._compute_loss(self.model, input_valid, target_valid, epoch)
         loss.backward()
     
-    def _compute_loss(self, input_valid, target_valid, epoch):
-        loss = self.criterion(input_valid, target_valid)
-        spike_E = self.model.module._spike_energy()#.mean()
+    def _compute_loss(self, model, input_valid, target_valid, epoch):
+        loss = self.criterion(model(input_valid), target_valid)
+        spike_E = model.module.spike_energy()#.mean()
         # max_E at initial spike loss calculation for normalization
         if epoch == self.spike_step:
             self.max_E = spike_E
@@ -48,4 +48,4 @@ class Architect(object):
         self.spike_loss = spike_loss
         self.arc_loss = new_loss
         
-        return spike_E #new_loss
+        return new_loss

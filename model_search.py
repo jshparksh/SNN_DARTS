@@ -65,8 +65,6 @@ class Cell(nn.Module):
     def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
         super(Cell, self).__init__()
         self.reduction = reduction
-        self.cell_e_add = torch.tensor(1, dtype=torch.float32).cuda()
-        self.cell_e_neuron = torch.tensor(1, dtype=torch.float32).cuda()
         
         if reduction_prev:
             self.preprocess0 = FactorizedReduce(C_prev_prev, C, base=math.sqrt(2), time_step=args.timestep, affine=False)
@@ -87,7 +85,6 @@ class Cell(nn.Module):
     def forward(self, s0, s1, weights):
         s0 = self.preprocess0(s0)
         s1 = self.preprocess1(s1)
-
         states = [s0, s1]
         offset = 0
         for i in range(self._steps):
@@ -97,13 +94,13 @@ class Cell(nn.Module):
             
         self.cell_e_add = 0
         self.cell_e_neuron = 0
-        
         for i in range(len(self._ops)):
             op = self._ops[i]
             op_alpha = weights[i] # op_alpha len = # of operations
             op_e_add, op_e_neuron = op._calculate_op_energy(op_alpha)
             self.cell_e_add += op_e_add
             self.cell_e_neuron += op_e_neuron
+
         return torch.cat(states[-self._multiplier:], dim=1)
 
 class Network(nn.Module):
@@ -122,10 +119,10 @@ class Network(nn.Module):
             nn.BatchNorm2d(C_curr),
             PACT()
         )
-        
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
         
         self.cells = nn.ModuleList()
+        self._total_spike_energy = torch.tensor(1)
         reduction_prev = False
         for i in range(layers):
             if i in [layers//3, 2*layers//3]:
@@ -151,6 +148,8 @@ class Network(nn.Module):
         return model_new
 
     def forward(self, input):
+        self.E_add = 0
+        self.E_neuron = 0
         s0 = s1 = self.stem(input)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
@@ -158,9 +157,17 @@ class Network(nn.Module):
             else:
                 weights = F.softmax(self.alphas_normal, dim=-1)
             s0, s1 = s1, cell(s0, s1, weights)
+            self.E_add += cell.cell_e_add
+            self.E_neuron += cell.cell_e_neuron
+        self._total_spike_energy = self.E_add + self.E_neuron
+        print('forward', self._total_spike_energy)
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
         return logits
+    
+    def spike_energy(self):
+        print(self._total_spike_energy)
+        return self._total_spike_energy
 
     def _initialize_alphas(self):
         k = sum(1 for i in range(self._steps) for n in range(2+i))
@@ -209,14 +216,7 @@ class Network(nn.Module):
         )
         return genotype
     
-    def _spike_energy(self):
-        self.E_add = 0
-        self.E_neuron = 0
-        for i in range(self._layers):
-            Cell_e_add, Cell_e_neuron = self.cells[i].cell_e_add, self.cells[i].cell_e_neuron # self.cells[i]._calculate_cell_energy(F.softmax(self.alphas_reduce, dim=-1) if reduction else F.softmax(self.alphas_normal, dim=-1))
-            self.E_add += Cell_e_add
-            self.E_neuron += Cell_e_neuron
-        return self.E_add + self.E_neuron
+    
         
             
             
