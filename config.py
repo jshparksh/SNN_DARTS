@@ -63,7 +63,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
         parser.add_argument('--begin', type=int, default=15, help='batch size') # imagenet -> 35
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
-        parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
+        parser.add_argument('--timestep', type=int, default=4, help='timestep for logarithmic spike')
 
         return parser
 

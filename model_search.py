@@ -45,20 +45,20 @@ class MixedOp(nn.Module):
         
         return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
+    @property
     def _calculate_op_energy(self, alphas):
-        self.flops_spikerate = 0
-        self.time_neuron = 0
+        # Using alpha (operation probability) to calculate energy of MixedOP
+        # Diff value for backward will be energy value
+        self.mixed_add = 0
+        self.mixed_neuron = 0
         
-        # forms should be x*alpha
         for op_idx in range(len(self._ops)):
             spike_data = self._ops[op_idx].spike_datas() # spike_data = [flops, spike_rate, time_neuron]
-            op_flops = np.array(spike_data[0]).sum(axis=0) * 1e-6
-            op_spike_rate = torch.sum(torch.stack(spike_data[1]), dim=0)
-            op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).mean()
-            #alphas[op_idx] *= 0.03*op_flops*op_spike_rate + 0.26*op_time_neuron
-            self.flops_spikerate += 0.03 * op_flops * op_spike_rate * alphas[op_idx]
-            self.time_neuron += 0.26 * op_time_neuron * alphas[op_idx]
-        return self.flops_spikerate, self.time_neuron
+            op_flops_spike_rate = torch.sum(torch.stack([flops * spike_rate for flops, spike_rate in zip(spike_data[0], spike_data[1])]), dim=0)
+            op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).sum()
+            self.mixed_add += 0.03 * op_flops_spike_rate * alphas[op_idx]
+            self.mixed_neuron += 0.26 * op_time_neuron * alphas[op_idx]
+        return self.mixed_add, self.mixed_neuron
     
 class Cell(nn.Module):
 
@@ -160,13 +160,11 @@ class Network(nn.Module):
             self.E_add += cell.cell_e_add
             self.E_neuron += cell.cell_e_neuron
         self._total_spike_energy = self.E_add + self.E_neuron
-        print('forward', self._total_spike_energy)
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
         return logits
     
     def spike_energy(self):
-        print(self._total_spike_energy)
         return self._total_spike_energy
 
     def _initialize_alphas(self):

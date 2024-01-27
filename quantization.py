@@ -22,7 +22,8 @@ class pact_function(InplaceFunction):
         # tensor.clamp(min=0., max=alpha) <- alpha is parameter (torch.tensor) 
         # clamp min, max should not be tensor, so use tensor.min(alpha)
         """same to : PACT function y = 0.5 * (torch.abs(x) - torch.abs(x - alpha) + alpha)"""
-        return x.clamp(min=base**(-time_step-2)).min(alpha)
+        y = torch.clamp(x, min=alpha.item()*base**(-time_step), max = alpha.item())
+        return y
         
     @staticmethod
     def backward(ctx, grad_output):
