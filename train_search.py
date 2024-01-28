@@ -155,7 +155,7 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                 spike_losses.update(architect.spike_loss.item(), n)
         
         optimizer.zero_grad()
-        logits = model(input)
+        logits = model(input) #, energy
         loss = criterion(logits, target)
 
         loss.backward()
@@ -191,8 +191,8 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-        if step == 2:
-            break
+        """if step == 2:
+            break"""
     logger.info("Train: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
 
 
@@ -207,7 +207,7 @@ def infer(valid_queue, model, epoch, criterion):
         input = input.cuda()
         target = target.cuda(non_blocking=True)
         with torch.no_grad():
-            logits = model(input)
+            logits = model(input) #, _
             loss = criterion(logits, target)
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))

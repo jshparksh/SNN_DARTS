@@ -33,7 +33,7 @@ class MixedOp(nn.Module):
     def __init__(self, C, stride):
         super(MixedOp, self).__init__()
         self._ops = nn.ModuleList()
-        
+        self._op_energy = 0
         for primitive in PRIMITIVES:
             op = OPS[primitive](C, stride, False)
             self._ops.append(op)
@@ -45,21 +45,24 @@ class MixedOp(nn.Module):
         
         return sum(w * ofm for w, ofm in zip(weights, self.ofms))
     
-    @property
-    def _calculate_op_energy(self, alphas):
+    def op_energy(self, alphas):
         # Using alpha (operation probability) to calculate energy of MixedOP
         # Diff value for backward will be energy value
-        self.mixed_add = 0
-        self.mixed_neuron = 0
+        mixed_add = 0
+        mixed_neuron = 0
         
         for op_idx in range(len(self._ops)):
             spike_data = self._ops[op_idx].spike_datas() # spike_data = [flops, spike_rate, time_neuron]
             op_flops_spike_rate = torch.sum(torch.stack([flops * spike_rate for flops, spike_rate in zip(spike_data[0], spike_data[1])]), dim=0)
             op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).sum()
-            self.mixed_add += 0.03 * op_flops_spike_rate * alphas[op_idx]
-            self.mixed_neuron += 0.26 * op_time_neuron * alphas[op_idx]
-        return self.mixed_add, self.mixed_neuron
-    
+            mixed_add += 0.03 * op_flops_spike_rate * alphas[op_idx]
+            mixed_neuron += 0.26 * op_time_neuron * alphas[op_idx]
+        self._op_e_add = mixed_add
+        self._op_e_neuron = mixed_neuron
+        
+        return self._op_e_add, self._op_e_neuron
+        
+
 class Cell(nn.Module):
 
     def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
@@ -91,18 +94,20 @@ class Cell(nn.Module):
             s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
             offset += len(states)
             states.append(s)
-            
+        
+        return torch.cat(states[-self._multiplier:], dim=1)
+
+    def cell_energy(self, weights):
         self.cell_e_add = 0
         self.cell_e_neuron = 0
         for i in range(len(self._ops)):
             op = self._ops[i]
             op_alpha = weights[i] # op_alpha len = # of operations
-            op_e_add, op_e_neuron = op._calculate_op_energy(op_alpha)
+            op_e_add, op_e_neuron = op.op_energy(op_alpha)
             self.cell_e_add += op_e_add
             self.cell_e_neuron += op_e_neuron
-
-        return torch.cat(states[-self._multiplier:], dim=1)
-
+        return self.cell_e_add, self.cell_e_neuron
+    
 class Network(nn.Module):
 
     def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
@@ -122,7 +127,8 @@ class Network(nn.Module):
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
         
         self.cells = nn.ModuleList()
-        self._total_spike_energy = torch.tensor(1)
+        self._total_spike_energy = torch.Tensor([1]).cuda()
+        
         reduction_prev = False
         for i in range(layers):
             if i in [layers//3, 2*layers//3]:
@@ -140,7 +146,8 @@ class Network(nn.Module):
         self.classifier = nn.Linear(C_prev, num_classes)
 
         self._initialize_alphas()
-
+        self._total_spike_energy = self.spike_energy()
+        
     def new(self):
         model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda()
         for x, y in zip(model_new.arch_parameters(), self.arch_parameters()):
@@ -148,8 +155,8 @@ class Network(nn.Module):
         return model_new
 
     def forward(self, input):
-        self.E_add = 0
-        self.E_neuron = 0
+        E_add = 0
+        E_neuron = 0
         s0 = s1 = self.stem(input)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
@@ -157,15 +164,17 @@ class Network(nn.Module):
             else:
                 weights = F.softmax(self.alphas_normal, dim=-1)
             s0, s1 = s1, cell(s0, s1, weights)
-            self.E_add += cell.cell_e_add
-            self.E_neuron += cell.cell_e_neuron
-        self._total_spike_energy = self.E_add + self.E_neuron
+            
+            """cell_e_add, cell_e_neuron = cell.cell_energy(weights)
+            E_add += cell_e_add
+            E_neuron += cell_e_neuron
+        self._total_spike_energy = E_add + E_neuron"""
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
-        return logits
+        return logits #, self._total_spike_energy
     
     def spike_energy(self):
-        return self._total_spike_energy
+        return torch.tensor(1).cuda() #self._total_spike_energy
 
     def _initialize_alphas(self):
         k = sum(1 for i in range(self._steps) for n in range(2+i))

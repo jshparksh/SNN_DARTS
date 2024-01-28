@@ -23,17 +23,18 @@ class Architect(object):
         
     def _backward_step(self, input_valid, target_valid, epoch):
         if epoch < self.spike_step:
-            loss = self.criterion(self.model(input_valid), target_valid)
+            loss = self.criterion(self.model(input_valid), target_valid) #[0]
             self.loss = loss
         else:
             loss = self._compute_loss(self.model, input_valid, target_valid, epoch)
         loss.backward()
     
     def _compute_loss(self, model, input_valid, target_valid, epoch):
-        loss = self.criterion(model(input_valid), target_valid)
-        spike_E = model.module.spike_energy()#.mean()
+        logit = model(input_valid) #, spike_energy
+        loss = self.criterion(logit, target_valid)
+        spike_E = torch.tensor(1).cuda() #spike_energy.mean()#model.module.spike_energy()#.mean()
         # max_E at initial spike loss calculation for normalization
-        if epoch == self.spike_step:
+        if self.max_E == 1:#epoch == self.spike_step:
             self.max_E = spike_E
         spike_loss = spike_E/self.max_E.detach() #detach() for double backpropagation
         lmd1 = 1/2
