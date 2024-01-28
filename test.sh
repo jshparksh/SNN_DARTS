@@ -1,1 +1,1 @@
-python train_search.py --name please_test --begin 10 --spike_step 15 --print_freq 1
+python train_search.py --name please_test --begin 10 --print_freq 1
