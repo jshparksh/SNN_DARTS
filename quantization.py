@@ -74,8 +74,8 @@ class PACT_with_log_quantize(nn.Module):
         self.time_step = time_step
     
     def forward(self, input):
-        input = self.relu(input)
         qinput = pact_function.apply(input, self.alpha, self.base, self.time_step)
-        self.normed_ofm = (qinput / self.alpha).clone().detach().requires_grad_(True)
+        qinput = self.relu(qinput)
+        self.normed_ofm = (qinput / self.alpha).clone().requires_grad_(True)
         qinput = log_quantize.apply(self.normed_ofm, self.base, self.time_step, self.alpha)
         return qinput
