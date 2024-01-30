@@ -9,8 +9,7 @@ args = SearchConfig()
 # v = sqrt
 OPS = {
     'none' : lambda C, stride, affine: Zero(stride),
-    'max_pool_3x3_4v2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
-    'max_pool_3x3_v2' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(2), time_step=args.timestep),
+    'max_pool_3x3' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
     'skip_connect' : lambda C, stride, affine: Identity() if stride == 1 else FactorizedReduce(C, C, base=math.sqrt(2), time_step=args.timestep, affine=affine),
     'conv_3x3_4v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
     'conv_3x3_v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
@@ -59,7 +58,7 @@ class AvgPool(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
 
 class MaxPool(nn.Module):
@@ -118,7 +117,7 @@ class Conv(nn.Module):
     
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class DilConv(nn.Module):
@@ -153,7 +152,7 @@ class DilConv(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class SepConv(nn.Module):
@@ -195,7 +194,7 @@ class SepConv(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class Identity(nn.Module):
@@ -263,5 +262,5 @@ class FactorizedReduce(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         return [self.flops, self.spike_rate, self.time_neuron]

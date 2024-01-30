@@ -90,11 +90,11 @@ def main():
         current_lr = scheduler.get_lr()[0]
         logger.info('Epoch: %d lr: %e', epoch, current_lr)
         
-        # warmup
+        """# warmup
         if epoch < 5: # and args.batch_size > 256
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr * (epoch + 1) / 5.0
-            logger.info('Warming-up Epoch: %d, LR: %e', epoch, lr * (epoch + 1) / 5.0)
+            logger.info('Warming-up Epoch: %d, LR: %e', epoch, lr * (epoch + 1) / 5.0)"""
         
         # genotype
         genotype = model.module.genotype()
@@ -147,23 +147,23 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
         input_search = input_search.cuda(non_blocking=True)
         target_search = target_search.cuda(non_blocking=True)
         
-        # after begin epoch, update alpha
-        if epoch >= args.begin:
-            architect.step(input_search, target_search, epoch)
-            arc_losses.update(architect.loss.item(), n)
-            if epoch >= args.spike_step:
-                spike_losses.update(architect.spike_loss.item(), n)
-        
         optimizer.zero_grad()
-        logits = model(input) #, energy
+        # after begin epoch, update alpha
+        if epoch >= args.spike_step:
+            architect.step(input_search, target_search, spike_bool=True)
+            arc_losses.update(architect.loss.item(), n)
+            spike_losses.update(architect.spike_loss.item(), n)
+        elif epoch >= args.begin:
+            architect.step(input_search, target_search, spike_bool=False)
+            arc_losses.update(architect.loss.item(), n)
+                
+        logits = model(input)
         loss = criterion(logits, target)
-
         loss.backward()
         # gradient clipping
         nn.utils.clip_grad_norm_(model.module.parameters(), args.grad_clip)
         
         optimizer.step()
-
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         losses.update(loss.data.item(), n)
@@ -191,9 +191,11 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-        """if step == 2:
-            break"""
-    logger.info("Train: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
+        if step == 100:
+            break
+    logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
+    if epoch >= args.spike_step:
+        logger.info("Train: [{:2d}/{}] Spike Energy {:.4f}".format(epoch+1, args.epochs, architect.spike_E.item()))
 
 
 
@@ -207,7 +209,7 @@ def infer(valid_queue, model, epoch, criterion):
         input = input.cuda()
         target = target.cuda(non_blocking=True)
         with torch.no_grad():
-            logits = model(input) #, _
+            logits = model(input)
             loss = criterion(logits, target)
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
@@ -224,7 +226,6 @@ def infer(valid_queue, model, epoch, criterion):
                         top1=top1, top5=top5))
         if step == 2:
             break
-
     logger.info("Valid: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
     return top1.avg, losses.avg
 

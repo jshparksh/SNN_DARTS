@@ -44,9 +44,9 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--name', required=True)
         parser.add_argument('--dataset', type=str, default='CIFAR10', help='CIFAR10 / MNIST / FashionMNIST')
         parser.add_argument("--save_dir", type=str, default="/searchs/", help="path to save results")
-        parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-        parser.add_argument('--learning_rate', type=float, default=0.5, help='init learning rate')
-        parser.add_argument('--learning_rate_min', type=float, default=0.0, help='min learning rate')
+        parser.add_argument('--batch_size', type=int, default=128, help='batch size')
+        parser.add_argument('--learning_rate', type=float, default=0.1, help='init learning rate')
+        parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum for weights')
         parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay for weights')
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
@@ -63,6 +63,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
         parser.add_argument('--begin', type=int, default=15, help='batch size') # imagenet -> 35
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
+        parser.add_argument('--spike_bool', type=bool, default=False, help='to check status of training with spike loss')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
 
         return parser

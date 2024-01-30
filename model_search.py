@@ -146,7 +146,6 @@ class Network(nn.Module):
         self.classifier = nn.Linear(C_prev, num_classes)
 
         self._initialize_alphas()
-        self._total_spike_energy = self.spike_energy()
         
     def new(self):
         model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda()
@@ -154,7 +153,7 @@ class Network(nn.Module):
             x.data.copy_(y.data)
         return model_new
 
-    def forward(self, input):
+    def forward(self, input, spike_bool=False):
         E_add = 0
         E_neuron = 0
         s0 = s1 = self.stem(input)
@@ -164,17 +163,24 @@ class Network(nn.Module):
             else:
                 weights = F.softmax(self.alphas_normal, dim=-1)
             s0, s1 = s1, cell(s0, s1, weights)
-            
-            """cell_e_add, cell_e_neuron = cell.cell_energy(weights)
-            E_add += cell_e_add
-            E_neuron += cell_e_neuron
-        self._total_spike_energy = E_add + E_neuron"""
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
-        return logits #, self._total_spike_energy
+        #print('spike_bool', self.spike_bool)
+        if spike_bool == True:
+            for i, cell in enumerate(self.cells):
+                if cell.reduction:
+                    weights = F.softmax(self.alphas_reduce, dim=-1)
+                else:
+                    weights = F.softmax(self.alphas_normal, dim=-1)
+                cell_e_add, cell_e_neuron = cell.cell_energy(weights)
+                E_add += cell_e_add
+                E_neuron += cell_e_neuron
+            self._total_spike_energy = E_add + E_neuron
+            return logits, self._total_spike_energy
+        return logits
     
     def spike_energy(self):
-        return torch.tensor(1).cuda() #self._total_spike_energy
+        return self._total_spike_energy
 
     def _initialize_alphas(self):
         k = sum(1 for i in range(self._steps) for n in range(2+i))

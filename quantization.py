@@ -22,7 +22,7 @@ class pact_function(InplaceFunction):
         # tensor.clamp(min=0., max=alpha) <- alpha is parameter (torch.tensor) 
         # clamp min, max should not be tensor, so use tensor.min(alpha)
         """same to : PACT function y = 0.5 * (torch.abs(x) - torch.abs(x - alpha) + alpha)"""
-        y = torch.clamp(x, min=alpha.item()*base**(-time_step), max = alpha.item())
+        y = torch.clamp(x, min=alpha.item()*base**(-time_step-1), max=alpha.item()) #alpha.item()*base**(-time_step - 1), max = alpha.item())
         return y
         
     @staticmethod
@@ -46,8 +46,8 @@ class log_quantize(InplaceFunction):
     @staticmethod
     def forward(ctx, x, base, time_step, scale): # x = normed_ofm
         log_value = torch.log(x)/torch.log(torch.tensor(base))
-        round = torch.where(log_value <= -1, torch.round(log_value), torch.tensor(-1, dtype=torch.float32).cuda())
-        return torch.where(round >= -time_step, base**round, torch.tensor(0, dtype=torch.float32).cuda()) * scale
+        round = torch.where(log_value <= -1, torch.round(log_value), torch.tensor(-1.).cuda())
+        return torch.where(round >= -time_step, base**round, torch.tensor(0.,).cuda()) * scale
     
     @staticmethod
     def backward(ctx, grad_output):
@@ -75,7 +75,6 @@ class PACT_with_log_quantize(nn.Module):
     
     def forward(self, input):
         qinput = pact_function.apply(input, self.alpha, self.base, self.time_step)
-        qinput = self.relu(qinput)
-        self.normed_ofm = (qinput / self.alpha).clone().requires_grad_(True)
+        self.normed_ofm = (qinput / self.alpha)
         qinput = log_quantize.apply(self.normed_ofm, self.base, self.time_step, self.alpha)
         return qinput
