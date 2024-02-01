@@ -19,6 +19,9 @@ from torch.autograd import Variable
 from model_search import Network
 from architect import Architect
 
+"""from model_search import MixedOp, Cell
+from operations import *"""
+
 args = SearchConfig()
 
 device = torch.device("cuda")
@@ -124,6 +127,76 @@ def main():
                 os.mkdir(os.path.join(args.path, str(epoch)))
         utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
 
+"""operation_list = [Zero, MaxPool, Identity, SepConv, SepConv5, DilConv3, DilConv5]
+
+
+def freeze(m):
+    logger.info(f"{m.__class__} freeze.")
+    for param in m.parameters():
+        param.requires_grad_(False)
+
+def preserve_grads(m):
+    if isinstance(m, Cell) or isinstance(m, MixedOp) or isinstance(m, Network):
+        return
+
+    flag = 0
+    for op in operation_list:
+        if isinstance(m, op):
+            flag = 1
+            break
+
+    if flag == 0:
+        return
+
+    for param in m.parameters():
+        if param.requires_grad and param.grad is not None:
+            g = param.grad.detach().cpu()
+            m.pre_grads.append(g)
+ 
+
+def check_grads_cosine(m):
+    if isinstance(m, Cell) or isinstance(m, MixedOp) or isinstance(m, Network):
+        return
+
+    flag = 0
+    for op in operation_list:
+        if isinstance(m, op):
+            flag = 1
+            break
+    if flag == 0:
+        return
+    if not m.pre_grads:
+        return
+
+    i = 0
+    true_i = 0
+    temp = 0
+
+ 
+    for param in m.parameters():
+        if param.requires_grad and param.grad is not None:
+            g = param.grad.detach().cpu()
+            if len(g) != 0:
+                temp += torch.cosine_similarity(g, m.pre_grads[i], dim=0).mean()
+                # import pdb
+                # pdb.set_trace()
+                true_i += 1
+            i += 1
+
+    if true_i != 0:
+        sim_avg = temp / true_i
+    m.pre_grads.clear()
+
+    m.avg += sim_avg
+
+    if m.count == 20:
+        if m.avg / m.count < 0.4:
+            freeze(m)
+        m.count = 0
+        m.avg = 0
+    else:
+        m.count += 1"""
+        
 def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, epoch):
     losses = utils.AverageMeter()
     arc_losses = utils.AverageMeter()
@@ -184,6 +257,8 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                         "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                             epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, arc_losses=arc_losses, spike_losses=spike_losses,
                             top1=top1, top5=top5))
+                    logger.info("Alpha normal gradient: {}".format(architect.normal_grad))
+                    logger.info("Alpha reduce gradient: {}".format(architect.reduce_grad))
                     
             else:
                 logger.info(
@@ -196,6 +271,8 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
     logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
     if epoch >= args.spike_step:
         logger.info("Train: [{:2d}/{}] Spike Energy {:.4f}".format(epoch+1, args.epochs, architect.spike_E.item()))
+    if epoch == args.spike_step:
+        logger.info("Maximum spike energy: {:.4f}".format(architect.max_E.item()))
 
 
 

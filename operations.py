@@ -31,7 +31,7 @@ class ReLUConvBN(nn.Module):
         self.C_out = C_out
         self.kernel_size = kernel_size
         self.stride = stride
-
+        
     def forward(self, x):
         self.flops = [args.batch_size / 4 * self.kernel_size * self.kernel_size * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2]
         return self.op(x)
@@ -95,7 +95,7 @@ class Conv(nn.Module):
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_out, kernel_size=kernel_size, stride=stride, padding=padding, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT_with_log_quantize(base, time_step)
+            PACT_with_log_quantize(base, time_step) 
             )
         self.base = base
         self.C_in = C_in

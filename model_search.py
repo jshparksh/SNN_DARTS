@@ -165,7 +165,6 @@ class Network(nn.Module):
             s0, s1 = s1, cell(s0, s1, weights)
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
-        #print('spike_bool', self.spike_bool)
         if spike_bool == True:
             for i, cell in enumerate(self.cells):
                 if cell.reduction:
