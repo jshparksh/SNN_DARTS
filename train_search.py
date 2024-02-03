@@ -124,7 +124,7 @@ def main():
             logger.info('Valid_acc %f', valid_acc)
         #logger.info('Test_acc %f', test_acc)
         if not os.path.exists(os.path.join(args.path, str(epoch))):
-                os.mkdir(os.path.join(args.path, str(epoch)))
+            os.mkdir(os.path.join(args.path, str(epoch)))
         utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
 
 """operation_list = [Zero, MaxPool, Identity, SepConv, SepConv5, DilConv3, DilConv5]

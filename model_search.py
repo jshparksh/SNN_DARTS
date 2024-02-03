@@ -73,7 +73,6 @@ class Cell(nn.Module):
             self.preprocess0 = FactorizedReduce(C_prev_prev, C, base=math.sqrt(2), time_step=args.timestep, affine=False)
         else:
             self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0, affine=False)
-            
         self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=False)
         self._steps = steps
         self._multiplier = multiplier
