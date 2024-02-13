@@ -39,7 +39,7 @@ class Architect(object):
             self.max_E = spike_E
         spike_loss = spike_E/(self.max_E.detach()) #detach() for preventing double backpropagation
         lmd1 = 1
-        lmd2 = 1/50
+        lmd2 = 1/5
         # for logging
         self.loss = loss
         self.spike_loss = spike_loss

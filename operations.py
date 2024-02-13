@@ -10,7 +10,7 @@ args = SearchConfig()
 OPS = {
     'none' : lambda C, stride, affine: Zero(stride),
     'max_pool_3x3' : lambda C, stride, affine: MaxPool(3, stride=stride, padding=1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep),
-    'skip_connect' : lambda C, stride, affine: Identity() if stride == 1 else FactorizedReduce(C, C, base=math.sqrt(2), time_step=args.timestep, affine=affine),
+    'skip_connect' : lambda C, stride, affine: Identity(base=math.sqrt(math.sqrt(2)), time_step=args.timestep) if stride == 1 else FactorizedReduce(C, C, base=math.sqrt(2), time_step=args.timestep, affine=affine),
     'conv_3x3_4v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
     'conv_3x3_v2' : lambda C, stride, affine: Conv(C, C, 3, stride, 1, base=math.sqrt(2), time_step=args.timestep, affine=affine),
     'sep_conv_3x3_4v2' : lambda C, stride, affine: SepConv(C, C, 3, stride, 1, base=math.sqrt(math.sqrt(2)), time_step=args.timestep, affine=affine),
@@ -25,7 +25,7 @@ class ReLUConvBN(nn.Module):
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_out, kernel_size, stride=stride, padding=padding, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT()
+            PACT_with_log_quantize(math.sqrt(2), args.timestep)
         )
         self.C_in = C_in
         self.C_out = C_out
@@ -76,13 +76,14 @@ class MaxPool(nn.Module):
         
     def forward(self, x):
         output = self.op(x)
-        self.num_ifm = [torch.numel(x)]
-        self.non_zero_ifm = [torch.count_nonzero(x)]
+        #self.num_ifm = [torch.numel(x)]
+        #self.non_zero_ifm = [torch.count_nonzero(x)]
         self.ofms = [self.op[1].normed_ofm]
         return output
 
     def spike_datas(self):
-        return [[0], [torch.tensor(0).cuda()], [torch.tensor(0).cuda()]]
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
+        return [[0], [torch.tensor(0).cuda()], self.time_neuron]
         """
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         self.time_neuron = [torch.round(-torch.log(ofm)/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
@@ -199,17 +200,23 @@ class SepConv(nn.Module):
     
 class Identity(nn.Module):
 
-    def __init__(self):
+    def __init__(self, base, time_step):
         super(Identity, self).__init__()
-        
+        self.op = nn.Sequential(
+            PACT_with_log_quantize(base, time_step)
+        )
+        self.base = base
+        self.ofms = [torch.tensor(1)]
     def forward(self, x):
-        return x
+        output = self.op(x)
+        self.ofms = [self.op[0].normed_ofm]
+        return output
     
     def spike_datas(self):
+        self.time_neuron = [torch.round(torch.where(ofm == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(ofm))/torch.log(torch.tensor(self.base))) for ofm in self.ofms]
         # assume input is output of spike neuron -> no need to calculate
-        return [[0], [torch.tensor(0).cuda()], [torch.tensor(0).cuda()]]
-
-
+        return [[0], [torch.tensor(0).cuda()], self.time_neuron]
+        
 class Zero(nn.Module):
 
     def __init__(self, stride):

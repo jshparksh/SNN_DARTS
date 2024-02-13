@@ -121,7 +121,7 @@ def load_checkpoint(model, load_dir, epoch=None, is_best=True):
         ckpt = os.path.join(load_dir, "checkpoint_{}.pth.tar".format(epoch))
     else:
         ckpt = os.path.join(load_dir, "checkpoint.pth.tar")
-    model.load_state_dict(torch.load(ckpt))
+    model.load_state_dict(torch.load(ckpt).module.state_dict(), strict=False)
     return model
 
 def count_parameters_in_MB(model):

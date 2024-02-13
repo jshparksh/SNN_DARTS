@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
+import math
 from operations import *
 from torch.autograd import Variable
 from utils import drop_path
 from quantization import *
-from config import SearchConfig
+from config import AugmentConfig
 
-args = SearchConfig()
+args = AugmentConfig()
 
 
 class Cell(nn.Module):
@@ -73,7 +74,7 @@ class Cell(nn.Module):
             self.cell_e_add += 0.03 * op_flops_spike_rate
             self.cell_e_neuron += 0.26 * op_time_neuron
         return self.cell_e_add, self.cell_e_neuron
-
+    
 class AuxiliaryHeadCIFAR(nn.Module):
 
     def __init__(self, C, num_classes):
@@ -122,6 +123,7 @@ class AuxiliaryHeadImageNet(nn.Module):
         return x
 
 
+
 class NetworkCIFAR(nn.Module):
 
     def __init__(self, C, num_classes, layers, auxiliary, genotype):
@@ -134,7 +136,7 @@ class NetworkCIFAR(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
             nn.BatchNorm2d(C_curr),
-            PACT()
+            PACT_with_log_quantize(math.sqrt(2), args.timestep)
         )
     
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
@@ -144,19 +146,21 @@ class NetworkCIFAR(nn.Module):
             if i in [layers//3, 2*layers//3]:
                 C_curr *= 2
                 reduction = True
-        else:
-            reduction = False
-        cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
-        reduction_prev = reduction
-        self.cells += [cell]
-        C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
-        if i == 2*layers//3:
-            C_to_auxiliary = C_prev
+            else:
+                reduction = False
+            cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+            reduction_prev = reduction
+            self.cells += [cell]
+            C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
+            if i == 2*layers//3:
+                C_to_auxiliary = C_prev
 
         if auxiliary:
             self.auxiliary_head = AuxiliaryHeadCIFAR(C_to_auxiliary, num_classes)
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Linear(C_prev, num_classes)
+        self.identity_for_spike = nn.Identity()
+        self.pact_log = PACT_with_log_quantize(base=math.sqrt(2), time_step=16)
 
     def forward(self, input):
         E_add = 0
@@ -173,9 +177,10 @@ class NetworkCIFAR(nn.Module):
             E_neuron += cell_e_neuron
         self._total_spike_energy = E_add + E_neuron
         out = self.global_pooling(s1)
+        out = self.pact_log(out)
         logits = self.classifier(out.view(out.size(0),-1))
+        logits = self.identity_for_spike(logits)
         return logits, logits_aux, self._total_spike_energy
-
 
 class NetworkImageNet(nn.Module):
 
@@ -209,17 +214,19 @@ class NetworkImageNet(nn.Module):
                 reduction = True
             else:
                 reduction = False
-        cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
-        reduction_prev = reduction
-        self.cells += [cell]
-        C_prev_prev, C_prev = C_prev, cell.multiplier * C_curr
-        if i == 2 * layers // 3:
-            C_to_auxiliary = C_prev
+            cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+            reduction_prev = reduction
+            self.cells += [cell]
+            C_prev_prev, C_prev = C_prev, cell.multiplier * C_curr
+            if i == 2 * layers // 3:
+                C_to_auxiliary = C_prev
 
         if auxiliary:
             self.auxiliary_head = AuxiliaryHeadImageNet(C_to_auxiliary, num_classes)
         self.global_pooling = nn.AvgPool2d(7)
         self.classifier = nn.Linear(C_prev, num_classes)
+        self.identity_for_spike = nn.Identity()
+        self.pact_log = PACT_with_log_quantize(base=math.sqrt(2), time_step=16)
 
     def forward(self, input):
         logits_aux = None
@@ -231,5 +238,7 @@ class NetworkImageNet(nn.Module):
                 if self._auxiliary and self.training:
                     logits_aux = self.auxiliary_head(s1)
         out = self.global_pooling(s1)
+        out = self.pact_log(out)
         logits = self.classifier(out.view(out.size(0), -1))
+        logits = self.identity_for_spike(logits)
         return logits, logits_aux

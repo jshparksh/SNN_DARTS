@@ -1,1 +1,1 @@
-python train.py --name mars_gogo
+python train.py --name dahoondahoon_v2
