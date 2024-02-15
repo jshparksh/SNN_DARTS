@@ -1,1 +1,1 @@
-python train.py --name dahoondahoon_v2
+python train_load.py --name 0215_test --load_epoch 99 --batch_size 128

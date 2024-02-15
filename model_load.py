@@ -8,9 +8,9 @@ from torch.autograd import Variable
 from genotypes import PRIMITIVES
 from genotypes import Genotype
 from quantization import *
-from config import SearchConfig
+from config import AugmentConfig
 
-args = SearchConfig()
+args = AugmentConfig()
 
 def channel_shuffle(x, groups):
     batchsize, num_channels, height, width = x.data.size()
@@ -153,32 +153,30 @@ class Network(nn.Module):
             x.data.copy_(y.data)
         return model_new
 
-    def forward(self, input, spike_bool=False):
+    def forward(self, input):
         E_add = 0
         E_neuron = 0
         s0 = s1 = self.stem(input)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
-                weights = F.softmax(self.alphas_reduce, dim=-1)
+                weights = self.alphas_reduce
             else:
-                weights = F.softmax(self.alphas_normal, dim=-1)
+                weights = self.alphas_normal
             s0, s1 = s1, cell(s0, s1, weights)
         out = self.global_pooling(s1)
         out = self.pact_log(out)
         logits = self.classifier(out.view(out.size(0),-1))
         logits = self.identity_for_spike(logits)
-        if spike_bool == True:
-            for i, cell in enumerate(self.cells):
-                if cell.reduction:
-                    weights = F.softmax(self.alphas_reduce, dim=-1)
-                else:
-                    weights = F.softmax(self.alphas_normal, dim=-1)
-                cell_e_add, cell_e_neuron = cell.cell_energy(weights)
-                E_add += cell_e_add
-                E_neuron += cell_e_neuron
-            self._total_spike_energy = E_add + E_neuron
-            return logits, self._total_spike_energy
-        return logits
+        for i, cell in enumerate(self.cells):
+            if cell.reduction:
+                weights = self.alphas_reduce
+            else:
+                weights = self.alphas_normal
+            cell_e_add, cell_e_neuron = cell.cell_energy(weights)
+            E_add += cell_e_add
+            E_neuron += cell_e_neuron
+        self._total_spike_energy = E_add + E_neuron
+        return logits, self._total_spike_energy
     
     def spike_energy(self):
         return self._total_spike_energy
@@ -196,7 +194,25 @@ class Network(nn.Module):
 
     def arch_parameters(self):
         return self._arch_parameters
-
+    
+    def fix_alpha(self, genotype):
+        k = sum(1 for i in range(self._steps) for n in range(2+i))
+        num_ops = len(PRIMITIVES)
+        # fix alpha value of genotype's operation to 1.0
+        normal_op, normal_indices = zip(*genotype.normal)
+        reduce_op, reduce_indices = zip(*genotype.reduce)
+        
+        self.alphas_normal = nn.Parameter(torch.zeros(k, num_ops).cuda(), requires_grad=False)
+        self.alphas_reduce = nn.Parameter(torch.zeros(k, num_ops).cuda(), requires_grad=False)
+        
+        k = 0
+        for i in range(self._steps):
+            self.alphas_normal[k+normal_indices[2*i]][PRIMITIVES.index(normal_op[2*i])] = 1.0
+            self.alphas_normal[k+normal_indices[2*i+1]][PRIMITIVES.index(normal_op[2*i+1])] = 1.0
+            self.alphas_reduce[k+reduce_indices[2*i]][PRIMITIVES.index(reduce_op[2*i])] = 1.0
+            self.alphas_reduce[k+reduce_indices[2*i+1]][PRIMITIVES.index(reduce_op[2*i+1])] = 1.0
+            k += sum(1 for n in range(2+i))
+            
     def genotype(self):
 
         def _parse(weights):
