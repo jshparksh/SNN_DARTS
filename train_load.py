@@ -123,7 +123,6 @@ def print_minimum_alpha(model, min_alpha):
                 module, min_alpha)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
             alpha_tmp = model._modules[name].alpha
-            print(alpha_tmp)
             if min_alpha > alpha_tmp:
                 min_alpha = alpha_tmp
     return min_alpha, model
