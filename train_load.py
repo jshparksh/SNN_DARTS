@@ -63,6 +63,7 @@ def main():
     model.fix_alpha(genotype)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
+    _ = nograd_alpha(model)
     # model.eval() # fix weight by grad freezing
     
     optimizer = torch.optim.SGD(
@@ -122,9 +123,18 @@ def print_minimum_alpha(model, min_alpha):
                 module, min_alpha)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
             alpha_tmp = model._modules[name].alpha
+            print(alpha_tmp)
             if min_alpha > alpha_tmp:
                 min_alpha = alpha_tmp
     return min_alpha, model
+
+def nograd_alpha(model):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            model._modules[name] = nograd_alpha(module)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            model._modules[name].alpha.requires_grad = False
+    return model
 
 def train(train_queue, model, optimizer, criterion, epoch):
     losses = utils.AverageMeter()
@@ -160,6 +170,7 @@ def train(train_queue, model, optimizer, criterion, epoch):
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch+1, args.epochs, step, len(train_queue)-1, losses=losses, spike_E=spike_E.item(),
                         top1=top1, top5=top5))
+        
     logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
 
 
@@ -189,7 +200,7 @@ def infer(valid_queue, model, epoch, criterion):
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch+1, args.epochs, step, len(valid_queue)-1, losses=losses,
                         top1=top1, top5=top5))
-            
+        
     logger.info("Valid: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
 
 if __name__ == '__main__':
