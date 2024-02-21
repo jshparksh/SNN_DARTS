@@ -22,7 +22,7 @@ class pact_function(InplaceFunction):
         # tensor.clamp(min=0., max=alpha) <- alpha is parameter (torch.tensor) 
         # clamp min, max should not be tensor, so use tensor.min(alpha)
         """same to : PACT function y = 0.5 * (torch.abs(x) - torch.abs(x - alpha) + alpha)"""
-        y = torch.clamp(x, min=alpha.item()*base**(-time_step-1), max=alpha.item()) #alpha.item()*base**(-time_step - 1), max = alpha.item())
+        y = torch.clamp(x, min=0.0, max=alpha.item()) #min=alpha.item()*base**(-time_step-1), max=alpha.item())
         return y
     @staticmethod
     def backward(ctx, grad_output):
@@ -45,7 +45,7 @@ class log_quantize(InplaceFunction):
     @staticmethod
     def forward(ctx, x, base, time_step, scale): # x = normed_ofm
         x = x / scale
-        log_value = torch.log(x)/torch.log(torch.tensor(base))
+        log_value = torch.where(x==0.0, torch.tensor(-time_step).float().cuda(), torch.log(x)/torch.log(torch.tensor(base)))
         round = torch.where(log_value <= 0.0, torch.round(log_value), torch.tensor(0.).cuda())
         return torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * scale
 #        assert False, x.view(-1)[torch.argmax(x-torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()))]
