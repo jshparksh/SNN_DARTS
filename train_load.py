@@ -63,7 +63,7 @@ def main():
     model.fix_alpha(genotype)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
-    _ = nograd_alpha(model)
+    #_ = nograd_alpha(model)
     # model.eval() # fix weight by grad freezing
     
     optimizer = torch.optim.SGD(
