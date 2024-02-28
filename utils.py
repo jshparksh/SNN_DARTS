@@ -9,7 +9,7 @@ import numpy as np
 import preproc
 
 
-def get_data(dataset, data_path, cutout_length, validation):
+def get_data(dataset, data_path, cutout_length):
     """ Get torchvision dataset """
     dataset = dataset.lower()
 
@@ -27,16 +27,9 @@ def get_data(dataset, data_path, cutout_length, validation):
 
     trn_transform, val_transform = preproc.data_transforms(dataset, cutout_length)
     trn_data = dset_cls(root=data_path, train=True, download=True, transform=trn_transform)
+    val_data = dset_cls(root=data_path, train=False, download=True, transform=val_transform)
 
-    # assuming shape is NHW or NHWC
-    shape = trn_data.data.shape
-    input_channels = 3 if len(shape) == 4 else 1
-    assert shape[1] == shape[2], "not expected shape = {}".format(shape)
-    input_size = shape[1]
-
-    ret = [input_size, input_channels, n_classes, trn_data]
-    if validation: # append validation data
-        ret.append(dset_cls(root=data_path, train=False, download=True, transform=val_transform))
+    ret = [n_classes, trn_data, val_data]
 
     return ret
 

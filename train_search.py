@@ -91,13 +91,7 @@ def main():
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
         logger.info('Epoch: %d lr: %e', epoch, current_lr)
-        
-        """# warmup
-        if epoch < 5: # and args.batch_size > 256
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr * (epoch + 1) / 5.0
-            logger.info('Warming-up Epoch: %d, LR: %e', epoch, lr * (epoch + 1) / 5.0)"""
-        
+                
         # genotype
         genotype = model.module.genotype()
         logger.info('genotype = %s', genotype)
@@ -206,15 +200,12 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-        if step == 2:
-            break
+        
     logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
     if epoch >= args.spike_step:
         logger.info("Train: [{:2d}/{}] Spike Energy {:.4f}".format(epoch+1, args.epochs, architect.spike_E.item()))
     if epoch == args.spike_step:
         logger.info("Maximum spike energy: {:.4f}".format(architect.max_E.item()))
-
-
 
 def infer(valid_queue, model, epoch, criterion):
     losses = utils.AverageMeter()

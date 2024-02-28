@@ -1,1 +1,1 @@
-python train_load.py --name 0215_test --load_epoch 99 --batch_size 128
+python train.py --name 0226_nolog_load --batch_size 256 --load_epoch 599
