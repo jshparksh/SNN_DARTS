@@ -70,7 +70,7 @@ class Cell(nn.Module):
         self.reduction = reduction
         
         if reduction_prev:
-            self.preprocess0 = FactorizedReduce(C_prev_prev, C, base=math.sqrt(2), time_step=args.timestep, affine=False)
+            self.preprocess0 = FactorizedReduce(C_prev_prev, C, time_step=args.timestep, affine=False)
         else:
             self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0, affine=False)
         self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=False)
@@ -121,7 +121,7 @@ class Network(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, 1, 1, bias=False),
             nn.BatchNorm2d(C_curr),
-            PACT_with_log_quantize(base=math.sqrt(2), time_step=16)
+            #PACT_with_log_quantize(time_step=16)
         )
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
         
@@ -144,7 +144,7 @@ class Network(nn.Module):
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Linear(C_prev, num_classes)
         self.identity_for_spike = nn.Identity()
-        self.pact_log = PACT_with_log_quantize(base=math.sqrt(2), time_step=16)
+        self.pact_log = PACT_with_log_quantize(time_step=16)
         self._initialize_alphas()
         
     def new(self):
@@ -164,7 +164,7 @@ class Network(nn.Module):
                 weights = F.softmax(self.alphas_normal, dim=-1)
             s0, s1 = s1, cell(s0, s1, weights)
         out = self.global_pooling(s1)
-        out = self.pact_log(out)
+        #out = self.pact_log(out)
         logits = self.classifier(out.view(out.size(0),-1))
         logits = self.identity_for_spike(logits)
         if spike_bool == True:

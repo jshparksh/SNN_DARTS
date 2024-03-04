@@ -47,7 +47,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--save_dir', type=str, default='./searchs/', help='path to save results')
         parser.add_argument('--load_dir', type=str, default='./searchs/0209_spikeloss0.2/', help='path to save results')
         parser.add_argument('--load_epoch', type=str, default=0, help='load pretrained model from specific epoch')
-        parser.add_argument('--batch_size', type=int, default=64, help='batch size')
+        parser.add_argument('--batch_size', type=int, default=128, help='batch size')
         parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
         parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum for weights')
@@ -56,7 +56,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--print_freq', type=int, default=50, help='print frequency')
         parser.add_argument('--gpus', default='0,1,2,3', help='gpu device ids separated by comma. '
                                                                 '`all` indicates use all gpus.')
-        parser.add_argument('--epochs', type=int, default=600, help='# of training epochs')
+        parser.add_argument('--epochs', type=int, default=100, help='# of training epochs')
         parser.add_argument('--init_channels', type=int, default=16)
         parser.add_argument('--layers', type=int, default=8, help='# of layers')
         parser.add_argument('--seed', type=int, default=2, help='random seed')

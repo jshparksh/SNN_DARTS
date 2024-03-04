@@ -73,7 +73,7 @@ def main():
 		valid_data, batch_size=args.batch_size,
 		shuffle=True, pin_memory=True, num_workers=args.workers)
 	
-	scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
+	scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
 	best_acc = 0.0
 	global init_energy
 	for epoch in range(args.epochs):

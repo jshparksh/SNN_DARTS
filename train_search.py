@@ -47,8 +47,8 @@ def main():
     torch.backends.cudnn.enabled=True
     
     # get data with meta info
-    input_size, input_channels, n_classes, train_data = utils.get_data(
-        args.dataset, args.data_path, cutout_length=0, validation=False)
+    n_classes, train_data, valid_data = utils.get_data(
+		args.dataset, args.data_path, cutout_length=0)
     
     criterion = nn.CrossEntropyLoss().cuda()
     
@@ -56,8 +56,8 @@ def main():
     logger.info("param size = %fMB", utils.count_parameters_in_MB(model))
     if args.load == True:
         model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
-    model = torch.nn.DataParallel(model)
     model = model.cuda()
+    model = torch.nn.DataParallel(model)
     
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -72,13 +72,11 @@ def main():
     
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, 
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-        pin_memory=True, num_workers=args.workers)
+        shuffle=True, pin_memory=True, num_workers=args.workers)
 
     valid_queue = torch.utils.data.DataLoader(
-        train_data, batch_size=args.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:n_train]),
-        pin_memory=True, num_workers=args.workers)
+        valid_data, batch_size=args.batch_size,
+        shuffle=True, pin_memory=True, num_workers=args.workers)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, args.epochs, eta_min=args.learning_rate_min)
@@ -86,7 +84,6 @@ def main():
     architect = Architect(model, criterion, args)
     
     # training loop
-    lr = args.learning_rate
     for epoch in range(args.epochs):
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
@@ -108,38 +105,63 @@ def main():
             logger.info('Begin spike-aware search')
             
         # training
-        train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, epoch)
+        train(train_queue, valid_queue, model, architect, optimizer, criterion, epoch)
         
         if epoch >= args.spike_step:
             # validation
             valid_acc, valid_obj = infer(valid_queue, model, epoch, criterion)
             logger.info('Valid_acc %f', valid_acc)
         min_alpha, _ = print_minimum_alpha(model, 5)
+        min_base, max_base, _ = print_min_max_base(model, 2, 0)
         logger.info('min_alpha %f', min_alpha)
+        logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
+        
         if not os.path.exists(os.path.join(args.path, str(epoch))):
             os.mkdir(os.path.join(args.path, str(epoch)))
         utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
 
 def print_minimum_alpha(model, min_alpha):
-  for name, module in model._modules.items():
-    if hasattr(module, "_modules"):
-      min_alpha, model._modules[name] = print_minimum_alpha(
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            min_alpha, model._modules[name] = print_minimum_alpha(
                 module, min_alpha)
-    if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-      alpha_tmp = model._modules[name].alpha
-      if min_alpha > alpha_tmp:
-        min_alpha = alpha_tmp
-  return min_alpha, model
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            alpha_tmp = model._modules[name].alpha
+            if min_alpha > alpha_tmp:
+                min_alpha = alpha_tmp
+    return min_alpha, model
 
-def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, epoch):
+def print_min_max_base(model, min_base, max_base):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            min_base, max_base, model._modules[name] = print_min_max_base(
+                module, min_base, max_base)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base_tmp = model._modules[name].base
+            if min_base > base_tmp:
+                min_base = base_tmp
+            if max_base < base_tmp:
+                max_base = base_tmp
+    return min_base, max_base, model
+
+def print_base(model, base):
+	for name, module in model._modules.items():
+		if hasattr(module, "_modules"):
+			base, model._modules[name] = print_base(
+								module, base)
+		if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+			base.append(model._modules[name].base)
+	return base, model
+
+def train(train_queue, valid_queue, model, architect, optimizer, criterion, epoch):
     losses = utils.AverageMeter()
     arc_losses = utils.AverageMeter()
     spike_losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
-
+    model.train()
+    
     for step, (input, target) in enumerate(train_queue):
-        model.train()
         n = input.size(0)
 
         input = input.cuda(non_blocking=True)
@@ -200,7 +222,9 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, lr, 
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-        
+            
+            base, _ = print_base(model, [])
+            print('base', base)
     logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
     if epoch >= args.spike_step:
         logger.info("Train: [{:2d}/{}] Spike Energy {:.4f}".format(epoch+1, args.epochs, architect.spike_E.item()))
@@ -232,8 +256,6 @@ def infer(valid_queue, model, epoch, criterion):
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch+1, args.epochs, step, len(valid_queue)-1, losses=losses,
                         top1=top1, top5=top5))
-        if step == 50:
-            break
     logger.info("Valid: [{:2d}/{}] Final Prec@1 {:.4%}".format(epoch+1, args.epochs, top1.avg))
     return top1.avg, losses.avg
 
