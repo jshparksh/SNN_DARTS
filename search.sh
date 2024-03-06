@@ -1,1 +1,1 @@
-python train_search.py --name 0213_test --print_freq 1 --begin 0 --spike_step 5 --load True --load_epoch 50
+python train_search.py --name 0306_combined --print_freq 1 --begin 0 --spike_step 5 --batch_size 256
