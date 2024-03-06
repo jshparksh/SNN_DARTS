@@ -144,6 +144,17 @@ def print_min_max_base(model, min_base, max_base):
                 max_base = base_tmp
     return min_base, max_base, model
 
+def print_base(model, base, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            base, model._modules[name] = print_base(module, base, op_name=op_name)
+            
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base.append([op_name, round(model._modules[name].base.item(), 5)])
+    return base, model
+"""
 def print_base(model, base):
 	for name, module in model._modules.items():
 		if hasattr(module, "_modules"):
@@ -152,7 +163,7 @@ def print_base(model, base):
 		if (hasattr(module, "alpha") and hasattr(module, "base") ) :
 			base.append(model._modules[name].base)
 	return base, model
-
+"""
 def train(train_queue, valid_queue, model, architect, optimizer, criterion, epoch):
     losses = utils.AverageMeter()
     arc_losses = utils.AverageMeter()
@@ -222,9 +233,11 @@ def train(train_queue, valid_queue, model, architect, optimizer, criterion, epoc
                     "Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, 
                         top1=top1, top5=top5))
-            
+            alpha, _ = print_minimum_alpha(model, 5)
             base, _ = print_base(model, [])
-            print('base', base)
+            print('alpha', alpha)
+            for list in base:
+                print(list)
     logger.info("Train: [{:2d}/{}] Final Prec {:.4%}".format(epoch+1, args.epochs, top1.avg))
     if epoch >= args.spike_step:
         logger.info("Train: [{:2d}/{}] Spike Energy {:.4f}".format(epoch+1, args.epochs, architect.spike_E.item()))

@@ -121,7 +121,7 @@ class Network(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, 1, 1, bias=False),
             nn.BatchNorm2d(C_curr),
-            #PACT_with_log_quantize(time_step=16)
+            PACT_with_log_quantize(time_step=16)
         )
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
         
@@ -144,7 +144,7 @@ class Network(nn.Module):
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Linear(C_prev, num_classes)
         self.identity_for_spike = nn.Identity()
-        self.pact_log = PACT_with_log_quantize(time_step=16)
+        #self.pact_log = PACT_with_log_quantize(time_step=16)
         self._initialize_alphas()
         
     def new(self):
