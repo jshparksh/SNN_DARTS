@@ -11,7 +11,7 @@ class Cell(nn.Module):
     print(C_prev_prev, C_prev, C)
 
     if reduction_prev:
-      self.preprocess0 = FactorizedReduce(C_prev_prev, C, base=math.sqrt(2), time_step=args.timestep, affine=False)
+      self.preprocess0 = FactorizedReduce(C_prev_prev, C, time_step=args.timestep, affine=False)
     else:
       self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0)
     self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0)
@@ -23,7 +23,7 @@ class Cell(nn.Module):
       op_names, indices = zip(*genotype.normal)
       concat = genotype.normal_concat
     self._compile(C, op_names, indices, concat, reduction)
-
+    
   def _compile(self, C, op_names, indices, concat, reduction):
     assert len(op_names) == len(indices)
     self._steps = len(op_names) // 2
@@ -105,7 +105,7 @@ class NetworkCIFAR(nn.Module):
     self.stem = nn.Sequential(
       nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
       nn.BatchNorm2d(C_curr),
-      PACT_with_log_quantize(math.sqrt(2), args.timestep)
+      PACT_with_log_quantize(time_step=args.timestep)
     )
     
     C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
@@ -129,7 +129,7 @@ class NetworkCIFAR(nn.Module):
     self.global_pooling = nn.AdaptiveAvgPool2d(1)
     self.classifier = nn.Linear(C_prev, num_classes)
     self.identity_for_spike = nn.Identity()
-    self.pact_log = PACT_with_log_quantize(base=math.sqrt(2), time_step=16)
+    self.pact_log = PACT_with_log_quantize(time_step=16)
 
   def forward(self, input):
     E_add = 0
