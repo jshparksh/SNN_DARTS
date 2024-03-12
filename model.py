@@ -3,7 +3,7 @@ import torch.nn as nn
 from operations import *
 from utils import drop_path
 
-
+  
 class Cell(nn.Module):
 
   def __init__(self, genotype, C_prev_prev, C_prev, C, reduction, reduction_prev):
@@ -23,7 +23,8 @@ class Cell(nn.Module):
       op_names, indices = zip(*genotype.normal)
       concat = genotype.normal_concat
     self._compile(C, op_names, indices, concat, reduction)
-    
+    self.mean_base = nn.Parameter(torch.Tensor([2.]), requires_grad=True).cuda()
+
   def _compile(self, C, op_names, indices, concat, reduction):
     assert len(op_names) == len(indices)
     self._steps = len(op_names) // 2
@@ -36,12 +37,69 @@ class Cell(nn.Module):
       op = OPS[name](C, stride, True)
       self._ops += [op]
     self._indices = indices
+            
+  def set_base(self):
+    base_tmp = 0
+    op_cnt = 0
+    for op in self._ops:
+      if op.op_type == 'zero':
+        pass
+      if op.op_type == 'fr':
+        for seq in op.conv_1:
+          if hasattr(seq, 'base'):
+            base_tmp += seq.base.data
+            op_cnt += 1
+        for seq in op.conv_2:
+          if hasattr(seq, 'base'):
+            base_tmp += seq.base.data
+            op_cnt += 1
+      else:
+        for seq in op.op:
+          if hasattr(seq, 'base'):
+            base_tmp += seq.base.data
+            op_cnt += 1
+
+    with torch.no_grad():
+      self.mean_base = nn.Parameter(torch.Tensor([base_tmp / op_cnt]), requires_grad=True).cuda()
+      mean_base2 = self.mean_base.item()
+      if self.preprocess0.op_type == 'fr':
+        for seq in self.preprocess0.conv_1:
+          if hasattr(seq, 'base'):
+            seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+        for seq in self.preprocess0.conv_2:
+          if hasattr(seq, 'base'):
+            seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+            
+      elif self.preprocess0.op_type == 'rcb':
+        for seq in self.preprocess0.op:
+          if hasattr(seq, 'base'):
+            seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+            
+      for seq in self.preprocess1.op:
+        if hasattr(seq, 'base'):
+          seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+          
+      for op in self._ops:
+        if op.op_type == 'fr':
+          for seq in op.conv_1:
+            if hasattr(seq, 'base'):
+              seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+
+          for seq in op.conv_2:
+            if hasattr(seq, 'base'):
+              seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+
+        else:
+          for seq in op.op:
+            if hasattr(seq, 'base'):
+              seq.base.data = torch.Tensor([(mean_base2)]).cuda()
+            
 
   def forward(self, s0, s1, drop_prob):
     s0 = self.preprocess0(s0)
     s1 = self.preprocess1(s1)
-
     states = [s0, s1]
+  
     for i in range(self._steps):
       h1 = states[self._indices[2*i]]
       h2 = states[self._indices[2*i+1]]
@@ -149,4 +207,5 @@ class NetworkCIFAR(nn.Module):
     out = self.pact_log(out)
     logits = self.classifier(out.view(out.size(0),-1))
     logits = self.identity_for_spike(logits)
+    
     return logits, logits_aux, self._total_spike_energy
