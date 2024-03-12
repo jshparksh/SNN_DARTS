@@ -88,8 +88,10 @@ def main():
         if valid_acc > best_acc:
             best_acc = valid_acc
         logger.info('valid_acc {:.4%}, best_acc {:.4%}'.format(valid_acc, best_acc))
-        #min_alpha, _ = print_minimum_alpha(model, 5)
-        #logger.info('min_alpha %f', min_alpha)
+        min_alpha, _ = print_minimum_alpha(model, 5)
+        min_base, max_base, _ = print_min_max_base(model, 2, 0)
+        logger.info('min_alpha %f', min_alpha)
+        logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
         if not os.path.exists(os.path.join(args.path, str(epoch))):
             os.mkdir(os.path.join(args.path, str(epoch)))
         utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
@@ -105,6 +107,19 @@ def print_minimum_alpha(model, min_alpha):
                 min_alpha = alpha_tmp
     return min_alpha, model
 
+def print_min_max_base(model, min_base, max_base):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            min_base, max_base, model._modules[name] = print_min_max_base(
+                module, min_base, max_base)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base_tmp = model._modules[name].base
+            if min_base > base_tmp:
+                min_base = base_tmp
+            if max_base < base_tmp:
+                max_base = base_tmp
+    return min_base, max_base, model
+
 def print_base(model, base, op_name='stem'):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
@@ -113,7 +128,7 @@ def print_base(model, base, op_name='stem'):
             base, model._modules[name] = print_base(module, base, op_name=op_name)
             
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base.append([op_name, round(model._modules[name].base.item(), 5)])
+            base.append([op_name, model._modules[name].base]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return base, model
 
 def train(train_queue, model, criterion, optimizer, epoch):
@@ -130,11 +145,17 @@ def train(train_queue, model, criterion, optimizer, epoch):
         target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
+        for cell in model.module.cells:
+            cell.set_base()
         logits, logits_aux, spike_E = model(input)
+
+        base, _ = print_base(model, [])
         spike_E = spike_E.mean()
         if epoch == 0 and step == 0:
             init_energy = spike_E
         loss = criterion(logits, target) #+ spike_E.detach() / init_energy.detach()
+        for list in base:
+            print(list)
         if args.auxiliary:
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
@@ -147,16 +168,14 @@ def train(train_queue, model, criterion, optimizer, epoch):
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
 
+
         if step % args.print_freq == 0:
             logger.info(
                 "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                     epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
                     top1=top1, top5=top5))
             alpha, _ = print_minimum_alpha(model, 5)
-            base, _ = print_base(model, [])
             print('alpha', alpha)
-            for list in base:
-                print(list)
     return top1.avg, losses.avg
 
 
