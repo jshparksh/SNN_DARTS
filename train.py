@@ -77,6 +77,8 @@ def main():
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
+        if epoch == args.basestep:
+            model = base_mode_switch(model)
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
         logger.info('Epoch: %d lr: %e', epoch, current_lr)
@@ -131,6 +133,15 @@ def print_base(model, base, op_name='stem'):
             base.append([op_name, model._modules[name].base]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return base, model
 
+def base_mode_switch(model):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            model._modules[name] = base_mode_switch(module)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            model._modules[name].alpha.requires_grad = True
+            model._modules[name].base.requires_grad = True
+    return model
+ 
 def train(train_queue, model, criterion, optimizer, epoch):
     losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
@@ -156,6 +167,7 @@ def train(train_queue, model, criterion, optimizer, epoch):
         loss = criterion(logits, target) #+ spike_E.detach() / init_energy.detach()
         for list in base:
             print(list)
+            
         if args.auxiliary:
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
@@ -176,6 +188,7 @@ def train(train_queue, model, criterion, optimizer, epoch):
                     top1=top1, top5=top5))
             alpha, _ = print_minimum_alpha(model, 5)
             print('alpha', alpha)
+
     return top1.avg, losses.avg
 
 
@@ -200,6 +213,7 @@ def infer(valid_queue, model, criterion, epoch):
 
         if step % args.print_freq == 0:
             logger.info("Valid: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Final Prec@1 {top1.avg:.4%}".format(epoch+1, args.epochs, step, len(valid_queue) - 1, losses=losses, top1=top1))
+
     return top1.avg, losses.avg
 
 

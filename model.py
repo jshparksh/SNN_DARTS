@@ -187,7 +187,7 @@ class NetworkCIFAR(nn.Module):
     self.global_pooling = nn.AdaptiveAvgPool2d(1)
     self.classifier = nn.Linear(C_prev, num_classes)
     self.identity_for_spike = nn.Identity()
-    self.pact_log = PACT_with_log_quantize(time_step=16)
+    #self.pact_log = PACT_with_log_quantize(time_step=16)
 
   def forward(self, input):
     E_add = 0
@@ -204,7 +204,7 @@ class NetworkCIFAR(nn.Module):
       E_neuron += cell_e_neuron
     self._total_spike_energy = E_add + E_neuron
     out = self.global_pooling(s1)
-    out = self.pact_log(out)
+    #out = self.pact_log(out)
     logits = self.classifier(out.view(out.size(0),-1))
     logits = self.identity_for_spike(logits)
     

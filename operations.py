@@ -56,7 +56,7 @@ class AvgPool(nn.Module):
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         # quan_info = [ofm, base]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]
 
 class MaxPool(nn.Module):
@@ -77,7 +77,7 @@ class MaxPool(nn.Module):
         return output
 
     def spike_datas(self):
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [[0], [torch.tensor(0).cuda()], self.time_neuron]
     
 class Conv(nn.Module):
@@ -107,7 +107,7 @@ class Conv(nn.Module):
     
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class DilConv(nn.Module):
@@ -141,7 +141,7 @@ class DilConv(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class SepConv(nn.Module):
@@ -182,7 +182,7 @@ class SepConv(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]
     
 class Identity(nn.Module):
@@ -200,7 +200,7 @@ class Identity(nn.Module):
         return output
     
     def spike_datas(self):
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         # assume input is output of spike neuron -> no need to calculate
         return [[0], [torch.tensor(0).cuda()], self.time_neuron]
         
@@ -257,5 +257,5 @@ class FactorizedReduce(nn.Module):
 
     def spike_datas(self):
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(torch.tensor(quan_info[1]))) for quan_info in self.quan_infos]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]

@@ -68,6 +68,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
         parser.add_argument('--spike_bool', type=bool, default=False, help='to check status of training with spike loss')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
+        parser.add_argument('--basestep', type=int, default=2, help='base requires_grad switch into true')
 
         return parser
 
@@ -110,6 +111,7 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
         parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path prob')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
+        parser.add_argument('--basestep', type=int, default=2, help='base requires_grad switch into true')
 
         return parser
 
