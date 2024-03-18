@@ -68,7 +68,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
         parser.add_argument('--spike_bool', type=bool, default=False, help='to check status of training with spike loss')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
-        parser.add_argument('--basestep', type=int, default=2, help='base requires_grad switch into true')
+        parser.add_argument('--warmup', type=int, default=5, help='base requires_grad switch into true')
 
         return parser
 
@@ -92,14 +92,14 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--load_dir', type=str, default='./augments/0226_nolog/', help='path to save results')
         parser.add_argument('--load_epoch', type=str, default='0', help='load pretrained model from specific epoch')
         parser.add_argument('--batch_size', type=int, default=512, help='batch size')
-        parser.add_argument('--learning_rate', type=float, default=0.1, help='lr for weights')
+        parser.add_argument('--learning_rate', type=float, default=0.01, help='lr for weights')
         parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
         parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
         parser.add_argument('--print_freq', type=int, default=1, help='print frequency')
         parser.add_argument('--gpus', default='0,1,2,3', help='gpu device ids separated by comma. '
                             '`all` indicates use all gpus.')
-        parser.add_argument('--epochs', type=int, default=599, help='# of training epochs')
+        parser.add_argument('--epochs', type=int, default=600, help='# of training epochs')
         parser.add_argument('--init_channels', type=int, default=32)
         parser.add_argument('--layers', type=int, default=16, help='# of layers')
         parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -109,9 +109,9 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
         parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
-        parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path prob')
+        parser.add_argument('--drop_path_prob', type=float, default=0, help='drop path prob')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
-        parser.add_argument('--basestep', type=int, default=2, help='base requires_grad switch into true')
+        parser.add_argument('--warmup', type=int, default=5, help='base requires_grad switch into true')
 
         return parser
 
