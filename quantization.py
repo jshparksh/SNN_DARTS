@@ -17,7 +17,7 @@ class pact_function(InplaceFunction):
     # See https://github.com/obilaniu/GradOverride/blob/master/functional.py
     # See https://arxiv.org/pdf/1805.06085.pdf
     @staticmethod
-    def forward(ctx, x, alpha, base, time_step):
+    def forward(ctx, x, alpha, time_step):
         ctx.save_for_backward(x, alpha)
         ctx.constant = time_step
         # tensor.clamp(min=0., max=alpha) <- alpha is parameter (torch.tensor) 
@@ -40,7 +40,7 @@ class pact_function(InplaceFunction):
         # Gradient of alpha ( x >= alpha )
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
         #grad_alpha = grad_output.new([ga])
-        return grad_x, grad_alpha, None, None
+        return grad_x, grad_alpha, None
     
 class log_quantize(InplaceFunction):
     @staticmethod
@@ -64,10 +64,11 @@ class log_quantize(InplaceFunction):
         #grad_base = torch.sum(torch.where(x<min_act, grad_output.float(), grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2))).view(-1) # torch.tensor(0.,).cuda()
         #grad_base = torch.sum(torch.where(x<min_act, grad_output*(x>0).float(), grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2))).view(-1) # torch.tensor(0.,).cuda()
         #grad_base = torch.sum(grad_output*x.ge(min_act)*x*(1-base)/(math.sqrt(base)*(1+base)**2).float()).view(-1)
-        grad_base = torch.sum(torch.where(x<min_act, grad_output*((x>0).float()), 1/2*grad_output/math.sqrt(base))).view(-1) #grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2))).view(-1) # torch.tensor(0.,).cuda()
+        #grad_base = torch.sum(1/2*grad_output*(x>0).float()/math.sqrt(base)).view(-1)
+        grad_base = (1/2*grad_output/math.sqrt(base)).view(-1) #torch.sum(torch.where(x<min_act, grad_output*(x>0).float(), 1/2*grad_output/math.sqrt(base))).view(-1)
         return grad_x, None, grad_base, None
     
-class PACT_log_quantize(InplaceFunction):
+class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha, base, time_step):
         ctx.save_for_backward(x, alpha, base)
@@ -87,13 +88,21 @@ class PACT_log_quantize(InplaceFunction):
         
         lt0      = x < 0
         ltm      = x < min_act
+        gt0      = x > 0
+        gtm      = x > min_act
         gta      = x > alpha
         gi       = (~(lt0|gta)).float()
         grad_x   = grad_output*gi
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
-        grad_base = torch.sum(torch.where(x<min_act, grad_output*((x>0).float()), grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2))).view(-1) # torch.tensor(0.,).cuda()
-        return grad_x, grad_alpha, grad_base, None
+        grad_base = torch.sum(torch.where(x<min_act, grad_output*(x>0).float(), 1/2*grad_output/math.sqrt(base))).view(-1) #grad_output*torch.tensor(0.,))).view(-1)
+        # print(x.size())
+        # print((grad_base*(x>0).float()).cpu().detach().mean().view(-1))
+        return grad_x, grad_alpha, grad_base, None 
     
+        #if x.size()[1] == 128 and x.size()[2] == 8:
+            
+            # lst = np.linspace(0, 0.01, 1)
+            # print(np.histogram(grad_output.cpu().detach().numpy(), bins=lst))
 class PACT(nn.Module):
     def __init__(self, alpha=5.):
         super(PACT, self).__init__()
@@ -104,21 +113,6 @@ class PACT(nn.Module):
         return qinput
 
 
-"""
-class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2., time_step=16):
-        super(PACT_with_log_quantize, self).__init__()
-        self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=True)
-        self.base = nn.Parameter(torch.Tensor([base]), requires_grad=True)
-        self.time_step = time_step
-        
-    def forward(self, input):
-        qinput, normed_output = PACT_log_quantize.apply(input, self.alpha, self.base, self.time_step)
-        self.normed_ofm = normed_output
-        return qinput
-"""    
-
-
 class PACT_with_log_quantize(nn.Module):
     def __init__(self, alpha=5., base=2., time_step=16):
         super(PACT_with_log_quantize, self).__init__()
@@ -127,7 +121,23 @@ class PACT_with_log_quantize(nn.Module):
         self.time_step = time_step
         
     def forward(self, input):
-        qinput = pact_function.apply(input, self.alpha, self.base, self.time_step)
+        qinput, normed_output = PACT_log_quantize.apply(input, self.alpha, self.base, self.time_step)
+        self.normed_ofm = normed_output
+        return qinput
+    
+"""    
+class PACT_with_log_quantize(nn.Module):
+    def __init__(self, alpha=5., base=2.0, time_step=4):
+        super(PACT_with_log_quantize, self).__init__()
+        self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
+        self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
+        self.time_step = time_step
+        
+    def forward(self, input):
+        qinput = pact_function.apply(input, self.alpha, self.time_step)
         self.normed_ofm = (qinput / self.alpha)
         qinput = log_quantize.apply(qinput, self.alpha, self.base, self.time_step)
         return qinput
+
+
+"""

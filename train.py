@@ -16,6 +16,7 @@ import torch.backends.cudnn as cudnn
 from tensorboardX import SummaryWriter
 from config import AugmentConfig
 from torch.autograd import Variable
+#from cnn_test import SimpleCNN as Network
 from model import NetworkCIFAR as Network
 
 args = AugmentConfig()
@@ -49,7 +50,8 @@ def main():
         args.dataset, args.data_path, cutout_length=0)
         
     genotype = eval("genotypes.%s" % args.arch)
-    model = Network(args.init_channels, n_classes, args.layers, args.auxiliary, genotype)
+    #model = Network(train_data)
+    model = Network(args.init_channels, n_classes, args.layers, genotype)
      
     #model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
     model = model.cuda()
@@ -62,7 +64,7 @@ def main():
         model.parameters(),
         args.learning_rate,
         momentum=args.momentum,
-        weight_decay=args.weight_decay
+        #weight_decay=args.weight_decay
         )
     
     train_queue = torch.utils.data.DataLoader(
@@ -77,7 +79,7 @@ def main():
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
-        if epoch == args.basestep:
+        if epoch == args.warmup:
             model = base_mode_switch(model)
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
@@ -122,6 +124,16 @@ def print_min_max_base(model, min_base, max_base):
                 max_base = base_tmp
     return min_base, max_base, model
 
+def print_base_grad(model, base, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            base, model._modules[name] = print_base_grad(module, base, op_name=op_name)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base.append([op_name, model._modules[name].base.grad])
+    return base, model
+
 def print_base(model, base, op_name='stem'):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
@@ -130,7 +142,7 @@ def print_base(model, base, op_name='stem'):
             base, model._modules[name] = print_base(module, base, op_name=op_name)
             
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base.append([op_name, model._modules[name].base]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
+            base.append([op_name, model._modules[name].base.data]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return base, model
 
 def base_mode_switch(model):
@@ -138,7 +150,7 @@ def base_mode_switch(model):
         if hasattr(module, "_modules"):
             model._modules[name] = base_mode_switch(module)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            model._modules[name].alpha.requires_grad = True
+            #model._modules[name].alpha.requires_grad = True
             model._modules[name].base.requires_grad = True
     return model
  
@@ -156,36 +168,48 @@ def train(train_queue, model, criterion, optimizer, epoch):
         target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
-        for cell in model.module.cells:
-            cell.set_base()
-        logits, logits_aux, spike_E = model(input)
+        logits = model(input)
+        
+        # for cell in model.cells: #module.cells:
+        #     cell.set_base()
+        # logits, logits_aux, spike_E = model(input)
 
-        base, _ = print_base(model, [])
-        spike_E = spike_E.mean()
-        if epoch == 0 and step == 0:
-            init_energy = spike_E
-        loss = criterion(logits, target) #+ spike_E.detach() / init_energy.detach()
-        for list in base:
-            print(list)
+        # spike_E = spike_E.mean()
+        # if epoch == 0 and step == 0:
+        #     init_energy = spike_E
+        """
+        if epoch >= args.warmup:
+            loss = criterion(logits, target) + spike_E / init_energy.detach()
+        else:
+            loss = criterion(logits, target)
+        """
+        loss = criterion(logits, target)
             
         if args.auxiliary:
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
         loss.backward()
+        base, _ = print_base(model, [])
+        base_grad, _ = print_base_grad(model, [])
+        for i in range(len(base)):
+            print(base[i][0], base[i][1], base_grad[i][1])
+        #print('base_grad', base_grad)
         nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
         optimizer.step()
-
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         losses.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
 
-
         if step % args.print_freq == 0:
             logger.info(
-                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
                     top1=top1, top5=top5))
+            # logger.info(
+            #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+            #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+            #         top1=top1, top5=top5))
             alpha, _ = print_minimum_alpha(model, 5)
             print('alpha', alpha)
 
@@ -202,7 +226,7 @@ def infer(valid_queue, model, criterion, epoch):
         input = input.cuda()
         target = target.cuda(non_blocking=True)
 
-        logits, _, _ = model(input)
+        logits = model(input)
         loss = criterion(logits, target)
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
