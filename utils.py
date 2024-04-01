@@ -127,3 +127,68 @@ def drop_path(x, drop_prob):
         x.div_(keep_prob)
         x.mul_(mask)
     return x
+
+def print_minimum_alpha(model, min_alpha):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            min_alpha, model._modules[name] = print_minimum_alpha(
+                                module, min_alpha)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            alpha_tmp = model._modules[name].alpha
+            if min_alpha > alpha_tmp:
+                min_alpha = alpha_tmp
+    return min_alpha, model
+
+def print_min_max_base(model, min_base, max_base):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            min_base, max_base, model._modules[name] = print_min_max_base(
+                module, min_base, max_base)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base_tmp = model._modules[name].base
+            if min_base > base_tmp:
+                min_base = base_tmp
+            if max_base < base_tmp:
+                max_base = base_tmp
+    return min_base, max_base, model
+
+def print_base_grad(model, base, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            base, model._modules[name] = print_base_grad(module, base, op_name=op_name)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base.append([op_name, round(model._modules[name].base.grad.item(), 5)])
+    return base, model
+
+def print_base(model, base, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            base, model._modules[name] = print_base(module, base, op_name=op_name)
+            
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base.append([op_name, round(model._modules[name].base.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
+    return base, model
+
+# edit here
+def base_mode_switch(model):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            model._modules[name] = base_mode_switch(module)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            model._modules[name].alpha.requires_grad = True
+            model._modules[name].base.requires_grad = True
+    return model
+
+def split_params(model):
+    base_params = []
+    other_params = []
+    for name, param in model.named_parameters():
+        if 'base' in name:
+            base_params.append(param)
+        else:
+            other_params.append(param)
+    return base_params, other_params

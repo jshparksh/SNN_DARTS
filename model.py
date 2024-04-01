@@ -54,6 +54,72 @@ class Cell(nn.Module):
             states += [s]
         return torch.cat([states[i] for i in self._concat], dim=1)
 
+    def set_base(self):
+        base_tmp = 0
+        op_cnt = 0
+        for op in self._ops:
+            if op.op_type == 'zero':
+                pass
+            if op.op_type == 'fr':
+                for seq in op.conv_1:
+                    if hasattr(seq, 'base'):
+                        base_tmp += seq.base.data
+                        op_cnt += 1
+                for seq in op.conv_2:
+                    if hasattr(seq, 'base'):
+                        base_tmp += seq.base.data
+                        op_cnt += 1
+            else:
+                for seq in op.op:
+                    if hasattr(seq, 'base'):
+                        base_tmp += seq.base.data
+                        op_cnt += 1
+        with torch.no_grad():
+            self.mean_base = base_tmp / op_cnt 
+            if self.preprocess0.op_type == 'fr':
+                for seq in self.preprocess0.conv_1:
+                    if hasattr(seq, 'base'):
+                        seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                for seq in self.preprocess0.conv_2:
+                    if hasattr(seq, 'base'):
+                        seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                    
+            elif self.preprocess0.op_type == 'rcb':
+                for seq in self.preprocess0.op:
+                    if hasattr(seq, 'base'):
+                        seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                
+            for seq in self.preprocess1.op:
+                if hasattr(seq, 'base'):
+                    seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+            
+            for op in self._ops:
+                if op.op_type == 'fr':
+                    for seq in op.conv_1:
+                        if hasattr(seq, 'base'):
+                            seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+
+                    for seq in op.conv_2:
+                        if hasattr(seq, 'base'):
+                            seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+
+                else:
+                    for seq in op.op:
+                        if hasattr(seq, 'base'):
+                            seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+    
+    def cell_energy(self):
+        self.cell_e_add = 0
+        self.cell_e_neuron = 0
+        for i in range(len(self._ops)):
+            op = self._ops[i]
+            spike_data = op.spike_datas()
+            op_flops_spike_rate = torch.sum(torch.stack([flops * spike_rate for flops, spike_rate in zip(spike_data[0], spike_data[1])]), dim=0)
+            op_time_neuron = torch.sum(torch.stack(spike_data[2]), dim=0).sum()
+            self.cell_e_add += 0.03 * op_flops_spike_rate
+            self.cell_e_neuron += 0.26 * op_time_neuron
+        return self.cell_e_add, self.cell_e_neuron
+       
 class NetworkCIFAR(nn.Module):
     
     def __init__(self, C, num_classes, layers, genotype):
@@ -85,9 +151,17 @@ class NetworkCIFAR(nn.Module):
         self.classifier = nn.Linear(C_prev, num_classes)
         
     def forward(self, input):
+        E_add = 0
+        E_neuron = 0
         s0 = s1 = self.stem(input)
         for cell in self.cells:
             s0, s1 = s1, cell(s0, s1)
+            cell_e_add, cell_e_neuron = cell.cell_energy()
+            E_add += cell_e_add
+            E_neuron += cell_e_neuron
+        self._total_spike_energy = E_add + E_neuron
         out = self.global_pooling(s1)
         logits = self.classifier(out.view(out.size(0),-1))
-        return logits
+        return logits, self._total_spike_energy
+    
+    

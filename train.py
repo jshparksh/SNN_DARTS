@@ -60,11 +60,19 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
+    # split model parameters into two groups
+    base_params, model_params = utils.split_params(model)
+    # sparate optimizer for base and model
     optimizer = torch.optim.SGD(
-        model.parameters(),
+        model_params,
         args.learning_rate,
         momentum=args.momentum,
-        #weight_decay=args.weight_decay
+        weight_decay=args.weight_decay
+        )
+    optimizer_base = torch.optim.SGD(
+        base_params,
+        args.learning_rate_base,
+        #momentum=args.momentum
         )
     
     train_queue = torch.utils.data.DataLoader(
@@ -76,85 +84,36 @@ def main():
         shuffle=True, pin_memory=True, num_workers=args.workers)
     
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
+    scheduler_base = torch.optim.lr_scheduler.StepLR(optimizer_base, step_size=50, gamma=0.5)# CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
         if epoch == args.warmup:
-            model = base_mode_switch(model)
+            model = utils.base_mode_switch(model)
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
-        logger.info('Epoch: %d lr: %e', epoch, current_lr)
+        #logger.info('Epoch: %d lr: %e', epoch, current_lr)
+        scheduler_base.step()
+        current_base_lr = scheduler_base.get_lr()[0]
+        logger.info('Epoch: %d lr: %e baselr: %e', epoch, current_lr, current_base_lr)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-        train_acc, train_obj = train(train_queue, model, criterion, optimizer, epoch)
+        #train_acc, train_obj = train(train_queue, model, criterion, optimizer, epoch)
+        train_acc, train_obj = train(train_queue, model, criterion, optimizer, optimizer_base, epoch)
         logger.info('train_acc {:.4%}'.format(train_acc))
 
         valid_acc, valid_obj = infer(valid_queue, model, criterion, epoch)
         if valid_acc > best_acc:
             best_acc = valid_acc
         logger.info('valid_acc {:.4%}, best_acc {:.4%}'.format(valid_acc, best_acc))
-        min_alpha, _ = print_minimum_alpha(model, 5)
-        min_base, max_base, _ = print_min_max_base(model, 2, 0)
+        min_alpha, _ = utils.print_minimum_alpha(model, 5)
+        min_base, max_base, _ = utils.print_min_max_base(model, 2, 0)
         logger.info('min_alpha %f', min_alpha)
         logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
         if not os.path.exists(os.path.join(args.path, str(epoch))):
             os.mkdir(os.path.join(args.path, str(epoch)))
-        utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
-
-def print_minimum_alpha(model, min_alpha):
-    for name, module in model._modules.items():
-        if hasattr(module, "_modules"):
-            min_alpha, model._modules[name] = print_minimum_alpha(
-                                module, min_alpha)
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            alpha_tmp = model._modules[name].alpha
-            if min_alpha > alpha_tmp:
-                min_alpha = alpha_tmp
-    return min_alpha, model
-
-def print_min_max_base(model, min_base, max_base):
-    for name, module in model._modules.items():
-        if hasattr(module, "_modules"):
-            min_base, max_base, model._modules[name] = print_min_max_base(
-                module, min_base, max_base)
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base_tmp = model._modules[name].base
-            if min_base > base_tmp:
-                min_base = base_tmp
-            if max_base < base_tmp:
-                max_base = base_tmp
-    return min_base, max_base, model
-
-def print_base_grad(model, base, op_name='stem'):
-    for name, module in model._modules.items():
-        if hasattr(module, "_modules"):
-            if hasattr(module, "op_type"):
-                op_name = module.op_type
-            base, model._modules[name] = print_base_grad(module, base, op_name=op_name)
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base.append([op_name, model._modules[name].base.grad])
-    return base, model
-
-def print_base(model, base, op_name='stem'):
-    for name, module in model._modules.items():
-        if hasattr(module, "_modules"):
-            if hasattr(module, "op_type"):
-                op_name = module.op_type
-            base, model._modules[name] = print_base(module, base, op_name=op_name)
-            
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base.append([op_name, model._modules[name].base.data]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
-    return base, model
-
-def base_mode_switch(model):
-    for name, module in model._modules.items():
-        if hasattr(module, "_modules"):
-            model._modules[name] = base_mode_switch(module)
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            #model._modules[name].alpha.requires_grad = True
-            model._modules[name].base.requires_grad = True
-    return model
+        #utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
-def train(train_queue, model, criterion, optimizer, epoch):
+def train(train_queue, model, criterion, optimizer, optimizer_base, epoch):
     losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
@@ -168,15 +127,18 @@ def train(train_queue, model, criterion, optimizer, epoch):
         target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
-        logits = model(input)
+        optimizer_base.zero_grad()
+        logits, spike_E = model(input)
         
-        # for cell in model.cells: #module.cells:
+        spike_E = spike_E.mean()
+        if epoch == 0 and step == 0:
+            init_energy = spike_E
+        
+        # edit here
+        # fix base for each cell
+        # for cell in model.module.cells: #module.cells:
         #     cell.set_base()
-        # logits, logits_aux, spike_E = model(input)
-
-        # spike_E = spike_E.mean()
-        # if epoch == 0 and step == 0:
-        #     init_energy = spike_E
+            
         """
         if epoch >= args.warmup:
             loss = criterion(logits, target) + spike_E / init_energy.detach()
@@ -184,17 +146,18 @@ def train(train_queue, model, criterion, optimizer, epoch):
             loss = criterion(logits, target)
         """
         loss = criterion(logits, target)
-            
+
         if args.auxiliary:
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
         loss.backward()
-        base, _ = print_base(model, [])
-        base_grad, _ = print_base_grad(model, [])
+        base, _ = utils.print_base(model, [])
+        base_grad, _ = utils.print_base_grad(model, [])
         for i in range(len(base)):
             print(base[i][0], base[i][1], base_grad[i][1])
-        #print('base_grad', base_grad)
+            
         nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
+        optimizer_base.step()
         optimizer.step()
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         losses.update(loss.data.item(), n)
@@ -202,15 +165,15 @@ def train(train_queue, model, criterion, optimizer, epoch):
         top5.update(prec5.data.item(), n)
 
         if step % args.print_freq == 0:
-            logger.info(
-                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
-                    top1=top1, top5=top5))
             # logger.info(
-            #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-            #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+            #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+            #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
             #         top1=top1, top5=top5))
-            alpha, _ = print_minimum_alpha(model, 5)
+            logger.info(
+                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+                    top1=top1, top5=top5))
+            alpha, _ = utils.print_minimum_alpha(model, 5)
             print('alpha', alpha)
 
     return top1.avg, losses.avg
@@ -226,7 +189,7 @@ def infer(valid_queue, model, criterion, epoch):
         input = input.cuda()
         target = target.cuda(non_blocking=True)
 
-        logits = model(input)
+        logits, _ = model(input)
         loss = criterion(logits, target)
 
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))

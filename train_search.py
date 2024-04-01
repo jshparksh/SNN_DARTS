@@ -59,11 +59,19 @@ def main():
     model = model.cuda()
     model = torch.nn.DataParallel(model)
     
+    base_params, model_params = utils.split_params(model)
+    
     optimizer = torch.optim.SGD(
-        model.parameters(),
+        model_params,
         args.learning_rate,
         momentum=args.momentum,
-        weight_decay=args.weight_decay)
+        weight_decay=args.weight_decay
+        )
+    optimizer_base = torch.optim.SGD(
+        base_params,
+        args.base_learning_rate,
+        momentum=args.momentum
+        )
     
     # split data to train/validation
     n_train = len(train_data)

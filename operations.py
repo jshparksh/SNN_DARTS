@@ -32,14 +32,22 @@ class ReLUConvBN(nn.Module):
         
     def forward(self, x):
         self.flops = [args.batch_size / 4 * self.kernel_size * self.kernel_size * self.C_in * self.C_out * x.size()[2] * x.size()[3] / self.stride ** 2]
+        self.num_ifm = [torch.numel(x)]
+        self.non_zero_ifm = [torch.count_nonzero(x)]
         return self.op(x)
 
+    def spike_datas(self):
+        self.quan_infos = [[self.op[2].normed_ofm, self.op[2].base]]
+        self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
+        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
+        return [self.flops, self.spike_rate, self.time_neuron]
+    
 class AvgPool(nn.Module):
     def __init__(self, kernel_size, stride, padding):
         super(AvgPool, self).__init__()
         self.op = nn.Sequential(
-        nn.AvgPool2d(kernel_size, stride=stride, padding=padding, count_include_pad=False),
-        PACT_with_log_quantize()
+            nn.AvgPool2d(kernel_size, stride=stride, padding=padding, count_include_pad=False),
+            #PACT_with_log_quantize()
         )
         self.flops = [0]
         self.num_ifm = [1]
@@ -48,23 +56,17 @@ class AvgPool(nn.Module):
     
     def forward(self, x):
         output = self.op(x)
-        self.quan_infos = [[self.op[1].normed_ofm, self.op[1].base]]
-        self.num_ifm = [torch.numel(x)]
-        self.non_zero_ifm = [torch.count_nonzero(x)]
         return output
 
     def spike_datas(self):
-        self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
-        # quan_info = [ofm, base]
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
-        return [self.flops, self.spike_rate, self.time_neuron]
+        return [0], [torch.tensor(0).cuda()], [torch.tensor(0).cuda()]
 
 class MaxPool(nn.Module):
     def __init__(self, kernel_size, stride, padding):
         super(MaxPool, self).__init__()
         self.op = nn.Sequential(
             nn.MaxPool2d(kernel_size, stride=stride, padding=padding),
-            PACT_with_log_quantize()
+            #PACT_with_log_quantize()
         )
         self.flops = [0]
         self.num_ifm = [1]
@@ -73,12 +75,12 @@ class MaxPool(nn.Module):
         
     def forward(self, x):
         output = self.op(x)
-        self.quan_infos = [[self.op[1].normed_ofm, self.op[1].base]]
+        #self.quan_infos = [[self.op[1].normed_ofm, self.op[1].base]]
         return output
 
     def spike_datas(self):
-        self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
-        return [[0], [torch.tensor(0).cuda()], self.time_neuron]
+        #self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
+        return [0], [torch.tensor(0).cuda()], [torch.tensor(0).cuda()] #self.time_neuron]
     
 class Conv(nn.Module):
     def __init__(self, C_in, C_out, kernel_size, stride, padding, affine=True):
