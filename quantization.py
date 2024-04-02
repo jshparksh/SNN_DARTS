@@ -42,9 +42,8 @@ class pact_function(InplaceFunction):
 class log_quantize(InplaceFunction):
     @staticmethod
     def forward(ctx, x, scale, base, time_step):
+        
         x = x / scale
-        #log_value = torch.log(x)/torch.log(torch.tensor(base))
-        #round = torch.round(log_value)
         log_value = torch.where(x==0.0, torch.tensor(-time_step).float().cuda(), torch.log(x)/torch.log(torch.tensor(base)))
         round = torch.round(log_value)
         
@@ -56,21 +55,38 @@ class log_quantize(InplaceFunction):
     @staticmethod
     def backward(ctx, grad_output):
         x, scale, base, round = ctx.saved_variables
-        gtr      = round > -ctx.constant
         
-        # grad_x = grad_output * gtr.float() * base**(round-1) / math.log(base)
-        min_act = scale*(base**(-ctx.constant)+base**(1-ctx.constant))/2
-        #grad_x = torch.where(x==0.0, grad_output*0, grad_output * scale * round * base**(round-1) / (x*math.log(base)))
-        grad_x   = grad_output
+        q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         
-        grad_base = torch.sum(torch.where(x==0.0, grad_output*0, gtr.float()*grad_output*scale*round*base**(round-1)*torch.log(x/scale)/torch.log(base))).view(-1)
-        #grad_base = torch.sum(torch.where(x<min_act, -grad_output*(x>0).float(), grad_output*((1-2*base**(1/2))/(1+base))**2)).view(-1) #*(1-2*base**(1/2))/(1+base))).view(-1)
-        #grad_base = torch.sum(grad_output*gtr*(2*x/(base+1)**2-(((round+1)*base**round-round*base**(round-1))/2))*(torch.log(4*x*base/scale)/torch.log(base)-2*torch.log(base+1)/torch.log(base))).view(-1)
-        #grad_base = torch.sum(grad_output*round.ge(-ctx.constant).float()*scale*round*base**(round-1)).view(-1) #torch.where(round > -ctx.constant, grad_output*scale*round*base**(1+round), )
-        #grad_base = torch.sum(torch.where(x<min_act, grad_output*(x>0).float(), grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2))).view(-1) # torch.tensor(0.,).cuda()
-        #grad_base = torch.sum(torch.where(x<min_act, -grad_output*(x>0).float(), 1/2*(base>1).float()*grad_output/math.sqrt(base))).view(-1)
-        return grad_x, None, grad_base, None
+        grad_x = grad_output
 
+        grad_base = torch.sum(q_x - x).view(-1)
+        
+        return grad_x, None, grad_base, None
+        
+        # k = 1000
+        # time = ctx.constant
+        # x = x / scale
+        # min_act = (base**(-time)+base**(1-time))/2
+        # tmp_grad_x = 0
+        # tmp_grad_base = 0
+        # for t in range(1, time+1):
+        #     x_exp = torch.exp(-k*(x-((base**(-t+1))+(base**(-t)))/2))
+        #     if time == t:
+        #         tmp_grad_x += (k*(((base**(1-t))))*x_exp)/(((x_exp+1)**2))
+        #         tmp_grad_base += k*(((base**(1-t)))*(t*(base**(-1-t))-(1-t)*(base**(-t)))*x_exp)/(2*((x_exp+1)**2)) + ((1-t)*((base**(-t))))/(x_exp+1)
+        #     else:
+        #         tmp_grad_x += (k*(((base**(1-t))-(base**(-t))))*x_exp)/(((x_exp+1)**2))
+        #         tmp_grad_base += k*(((base**(1-t))-(base**(-t)))*(t*(base**(-1-t))-(1-t)*(base**(-t)))*x_exp)/(2*((x_exp+1)**2)) + (t*(base**(-1-t))+(1-t)*(base**(-t)))/(x_exp+1)
+
+        # grad_x   = grad_output#*tmp_grad_x
+        
+        # grad_base = torch.sum(grad_output*tmp_grad_base).view(-1) #tmp_grad_base
+        # #grad_base = torch.sum(torch.where(x<min_act,))
+        # #grad_base = torch.sum(torch.where(x==0.0, grad_output*0, gtr.float()*grad_output*scale*round*base**(round-1)*torch.log(x/scale)/torch.log(base))).view(-1)
+        
+        # return grad_x, None, grad_base, None
+"""
 # edit here
 class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
@@ -106,7 +122,7 @@ class PACT_log_quantize(torch.autograd.Function):
         #grad_base = torch.sum(torch.where(x<min_act, grad_output*0, grad_output*0)).view(-1)
 
         return grad_x, grad_alpha, grad_base, None 
-
+"""
 class PACT(nn.Module):
     def __init__(self, alpha=5.):
         super(PACT, self).__init__()
@@ -119,7 +135,7 @@ class PACT(nn.Module):
 # edit here
 # split training alpha and base with seperate functions
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2.0, time_step=16):
+    def __init__(self, alpha=5., base=2.0, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)

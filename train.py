@@ -55,7 +55,7 @@ def main():
      
     #model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
     model = model.cuda()
-    model = torch.nn.DataParallel(model)
+    model = torch.nn.DataParallel(model, device_ids=args.gpus)
     logger.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
     criterion = nn.CrossEntropyLoss()
@@ -151,10 +151,11 @@ def train(train_queue, model, criterion, optimizer, optimizer_base, epoch):
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
         loss.backward()
-        base, _ = utils.print_base(model, [])
-        base_grad, _ = utils.print_base_grad(model, [])
-        for i in range(len(base)):
-            print(base[i][0], base[i][1], base_grad[i][1])
+        if epoch >= args.warmup:
+            base, _ = utils.print_base(model, [])
+            base_grad, _ = utils.print_base_grad(model, [])
+            for i in range(len(base)):
+                print(base[i][0], base[i][1], base_grad[i][1])
             
         nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
         optimizer_base.step()
