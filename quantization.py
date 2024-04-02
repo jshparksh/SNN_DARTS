@@ -88,7 +88,7 @@ class PACT_log_quantize(torch.autograd.Function):
     def backward(ctx, grad_output, grad_normed_ofm):
         x, alpha, base = ctx.saved_variables
         min_act = alpha*(base**(-ctx.constant)+base**(1-ctx.constant))/2
-        m = 1e-8
+        m = 1e-1
         lt0      = x < 0
         ltm      = x < min_act
         gt0      = x > 0
@@ -116,7 +116,6 @@ class PACT(nn.Module):
         qinput = pact_function.apply(input, self.alpha, 0, -3)
         return qinput
 
-"""
 # edit here
 # split training alpha and base with seperate functions
 class PACT_with_log_quantize(nn.Module):
@@ -147,6 +146,7 @@ class PACT_with_log_quantize(nn.Module):
         self.normed_ofm = normed_output
         return qinput
 
+"""
 
 
 """ 
