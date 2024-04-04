@@ -59,11 +59,11 @@ class log_quantize(InplaceFunction):
 
         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         
-        grad_x = grad_output*(x>min_act)
         min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
-        
-        m =torch.tensor(0.0001).cuda()
-        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)*(torch.log(m))/torch.log(base), -2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
+        grad_x = grad_output*(x>min_act)
+
+        m =torch.tensor(0.000001).cuda()
+        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
         # grad_base_2 = (torch.where(x < min_act, -0*q_x*(x-q_x)*, -2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
         return grad_x, None, grad_base, None
         
@@ -111,7 +111,6 @@ class PACT_log_quantize(torch.autograd.Function):
         gi       = (~(lt0|gta)).float()
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1) 
         grad_x   = grad_output * gi
-        
         x = torch.clamp(x, min=0., max=alpha.item()) / alpha
         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
