@@ -62,8 +62,8 @@ class log_quantize(InplaceFunction):
         min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
         grad_x = grad_output*(x>min_act)
 
-        m =torch.tensor(0.000001).cuda()
-        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
+        m =torch.tensor(0.00001).cuda()
+        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
         # grad_base_2 = (torch.where(x < min_act, -0*q_x*(x-q_x)*, -2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
         return grad_x, None, grad_base, None
         
@@ -151,7 +151,7 @@ class PACT(nn.Module):
 # edit here
 # split training alpha and base with seperate functions
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2.3, time_step=16):
+    def __init__(self, alpha=5., base=2.5, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)

@@ -136,8 +136,8 @@ def train(train_queue, model, criterion, optimizer, optimizer_base, epoch):
         
         # edit here
         # fix base for each cell
-        # for cell in model.module.cells: #module.cells:
-        #     cell.set_base()
+        for cell in model.module.cells: #module.cells:
+            cell.set_base()
             
         """
         if epoch >= args.warmup:
