@@ -173,6 +173,18 @@ def print_base(model, base, op_name='stem'):
             base.append([op_name, round(model._modules[name].base.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return base, model
 
+def print_base_tmpbase(model, base, tmp_base, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            base, tmp_base, model._modules[name] = print_base_tmpbase(module, base, tmp_base, op_name=op_name)
+            
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            base.append([op_name, round(model._modules[name].base.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
+            tmp_base.append([op_name, round(model._modules[name].tmp_base.item(), 5)])
+    return base, tmp_base, model
+
 def update_base(model, step):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):

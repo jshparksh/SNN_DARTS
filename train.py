@@ -71,8 +71,7 @@ def main():
         )
     optimizer_base = torch.optim.SGD(
         base_params,
-        args.learning_rate_base,
-        #momentum=args.momentum
+        args.learning_rate_base
         )
     
     train_queue = torch.utils.data.DataLoader(
@@ -101,7 +100,6 @@ def main():
         current_base_lr = scheduler_base.get_lr()[0]
         logger.info('Epoch: %d lr: %e baselr: %e', epoch, current_lr, current_base_lr)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-        #train_acc, train_obj = train(train_queue, model, criterion, optimizer, epoch)
         train_acc, train_obj = train(train_queue, model, model_params, criterion, optimizer, optimizer_base, epoch)
         logger.info('train_acc {:.4%}'.format(train_acc))
 
@@ -176,8 +174,12 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_base
             print('alpha', alpha)
         
         if epoch >= args.warmup:
+            base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
+            base_grad, _ = utils.print_base_grad(model, [])
+            for i in range(len(base)):
+                print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
             if step == len(train_queue) - 1:
-                #utils.update_base(model, len(train_queue) - 1)
+                utils.update_base(model, len(train_queue) - 1)
                 base, _ = utils.print_base(model, [])
                 base_grad, _ = utils.print_base_grad(model, [])
                 for i in range(len(base)):

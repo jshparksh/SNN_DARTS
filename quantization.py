@@ -125,7 +125,7 @@ class PACT_log_quantize(torch.autograd.Function):
         x = x / alpha
         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         m =torch.tensor(1e-6).cuda()
-        grad_tmp_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+        grad_tmp_base = torch.mean((x>0)*torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
         #grad_base = torch.sum(x*(x-q_x)*base**(-2/3)*(x>0)).view(-1)
         #grad_base = torch.sum(-(x - q_x)*x*(x>0)).view(-1)/torch.sqrt(base)/alpha
         return grad_x, grad_alpha, None, grad_tmp_base, None 
