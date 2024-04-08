@@ -62,50 +62,50 @@ class Cell(nn.Module):
                 pass
             if op.op_type == 'fr':
                 for seq in op.conv_1:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
                         op_cnt += 1
                 for seq in op.conv_2:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
                         op_cnt += 1
             else:
                 for seq in op.op:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
                         op_cnt += 1
         with torch.no_grad():
             self.mean_base = base_tmp / op_cnt 
             if self.preprocess0.op_type == 'fr':
                 for seq in self.preprocess0.conv_1:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                 for seq in self.preprocess0.conv_2:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                     
             elif self.preprocess0.op_type == 'rcb':
                 for seq in self.preprocess0.op:
-                    if hasattr(seq, 'base'):
+                    if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                 
             for seq in self.preprocess1.op:
-                if hasattr(seq, 'base'):
+                if hasattr(seq, 'tmp_base'):
                     seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
             
             for op in self._ops:
                 if op.op_type == 'fr':
                     for seq in op.conv_1:
-                        if hasattr(seq, 'base'):
+                        if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
 
                     for seq in op.conv_2:
-                        if hasattr(seq, 'base'):
+                        if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
 
                 else:
                     for seq in op.op:
-                        if hasattr(seq, 'base'):
+                        if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
     
     def cell_energy(self):

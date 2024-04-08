@@ -110,7 +110,6 @@ class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm):
         x, alpha, base, round = ctx.saved_variables
-        q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         
         min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
         lt0      = x < 0
@@ -120,13 +119,17 @@ class PACT_log_quantize(torch.autograd.Function):
         
         grad_x   = grad_output * gi
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        
+        
         x = torch.clamp(x, min=0., max=alpha.item())
         x = x / alpha
+        q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         m =torch.tensor(1e-6).cuda()
-        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+        grad_tmp_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
         #grad_base = torch.sum(x*(x-q_x)*base**(-2/3)*(x>0)).view(-1)
         #grad_base = torch.sum(-(x - q_x)*x*(x>0)).view(-1)/torch.sqrt(base)/alpha
-        
+        return grad_x, grad_alpha, None, grad_tmp_base, None 
+    
         # min_act = alpha*(base**(-ctx.constant)+base**(1-ctx.constant))/2
         # m = 1e-1
         # lt0      = x < 0
@@ -145,7 +148,6 @@ class PACT_log_quantize(torch.autograd.Function):
         #grad_base = torch.sum(torch.where(x<min_act, -grad_output*(x>0).float(), 1/2*grad_output/math.sqrt(base))).view(-1) # grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2)
         #grad_base = torch.sum(torch.where(x<min_act, grad_output*0, grad_output*0)).view(-1)
 
-        return grad_x, grad_alpha, None, grad_base, None 
 
 class PACT(nn.Module):
     def __init__(self, alpha=5.):
@@ -170,7 +172,7 @@ class PACT_with_log_quantize(nn.Module):
     def forward(self, input):
         qinput = pact_function.apply(input, self.alpha, self.time_step)
         self.normed_ofm = (qinput / self.alpha)
-        qinput = log_quantize.apply(qinput, self.alpha, self.base, self.tmp_base, self.time_step)
+        #qinput = log_quantize.apply(qinput, self.alpha, self.base, self.tmp_base, self.time_step)
         return qinput
     
 """

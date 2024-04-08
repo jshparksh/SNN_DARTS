@@ -183,12 +183,20 @@ def update_base(model, step):
     return model
 
 # edit here
+def param_mode_switch(model, grad_bool=True):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            model._modules[name] = param_mode_switch(module, grad_bool)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            model._modules[name].alpha.requires_grad = grad_bool
+            model._modules[name].tmp_base.requires_grad = grad_bool
+    return model
+
 def base_mode_switch(model, grad_bool=True):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
             model._modules[name] = base_mode_switch(module, grad_bool)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            model._modules[name].alpha.requires_grad = grad_bool
             model._modules[name].tmp_base.requires_grad = grad_bool
     return model
 
