@@ -90,6 +90,9 @@ def main():
     for epoch in range(args.epochs):
         if epoch == args.warmup:
             model = utils.base_mode_switch(model)
+        
+        if epoch == args.base_fix_epoch:
+            model = utils.base_mode_switch(model, grad_bool=False)
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
         #logger.info('Epoch: %d lr: %e', epoch, current_lr)
@@ -151,12 +154,6 @@ def train(train_queue, model, criterion, optimizer, optimizer_base, epoch):
             loss_aux = criterion(logits_aux, target)
             loss += args.auxiliary_weight*loss_aux
         loss.backward()
-        if epoch >= args.warmup:
-            base, _ = utils.print_base(model, [])
-            base_grad, _ = utils.print_base_grad(model, [])
-            for i in range(len(base)):
-                print(base[i][0], base[i][1], base_grad[i][1])
-            
         nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
         optimizer_base.step()
         optimizer.step()
@@ -176,7 +173,14 @@ def train(train_queue, model, criterion, optimizer, optimizer_base, epoch):
                     top1=top1, top5=top5))
             alpha, _ = utils.print_minimum_alpha(model, 5)
             print('alpha', alpha)
-
+        
+        if epoch >= args.warmup:
+            if step == len(train_queue) - 1:
+                utils.update_base(model, len(train_queue) - 1)
+                base, _ = utils.print_base(model, [])
+                base_grad, _ = utils.print_base_grad(model, [])
+                for i in range(len(base)):
+                    print(base[i][0], base[i][1], base_grad[i][1])
     return top1.avg, losses.avg
 
 

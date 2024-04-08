@@ -152,15 +152,15 @@ def print_min_max_base(model, min_base, max_base):
                 max_base = base_tmp
     return min_base, max_base, model
 
-def print_base_grad(model, base, op_name='stem'):
+def print_base_grad(model, tmp_base, op_name='stem'):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
             if hasattr(module, "op_type"):
                 op_name = module.op_type
-            base, model._modules[name] = print_base_grad(module, base, op_name=op_name)
+            tmp_base, model._modules[name] = print_base_grad(module, tmp_base, op_name=op_name)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            base.append([op_name, round(model._modules[name].base.grad.item(), 5)])
-    return base, model
+            tmp_base.append([op_name, round(model._modules[name].tmp_base.grad.item(), 5)])
+    return tmp_base, model
 
 def print_base(model, base, op_name='stem'):
     for name, module in model._modules.items():
@@ -173,22 +173,34 @@ def print_base(model, base, op_name='stem'):
             base.append([op_name, round(model._modules[name].base.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return base, model
 
-# edit here
-def base_mode_switch(model):
+def update_base(model, step):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
-            model._modules[name] = base_mode_switch(module)
+            model._modules[name] = update_base(module, step)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ):
+            model._modules[name].base += model._modules[name].tmp_base.data / step
+            model._modules[name].tmp_base.data *= 0
+    return model
+
+# edit here
+def base_mode_switch(model, grad_bool=True):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            model._modules[name] = base_mode_switch(module, grad_bool)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
-            model._modules[name].alpha.requires_grad = True
-            model._modules[name].base.requires_grad = True
+            model._modules[name].alpha.requires_grad = grad_bool
+            model._modules[name].tmp_base.requires_grad = grad_bool
     return model
 
 def split_params(model):
+    tmp_base_params = []
     base_params = []
     other_params = []
     for name, param in model.named_parameters():
-        if 'base' in name:
+        if 'tmp_base' in name:
+            tmp_base_params.append(param)
+        elif 'base' in name:
             base_params.append(param)
         else:
             other_params.append(param)
-    return base_params, other_params
+    return tmp_base_params, other_params

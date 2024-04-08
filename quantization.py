@@ -41,31 +41,35 @@ class pact_function(InplaceFunction):
     
 class log_quantize(InplaceFunction):
     @staticmethod
-    def forward(ctx, x, scale, base, time_step):
-        
+    def forward(ctx, x, scale, base, tmp_base, time_step):
         x = x / scale
         log_value = torch.where(x==0.0, torch.tensor(-time_step).float().cuda(), torch.log(x)/torch.log(torch.tensor(base)))
         round = torch.round(log_value)
 
         ctx.save_for_backward(x, scale, base, round)
         ctx.constant = time_step
-        
         return torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * scale
     
     @staticmethod
     def backward(ctx, grad_output):
         x, scale, base, round = ctx.saved_variables
-        round = torch.clamp(round, min= -ctx.constant)
 
         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
         
         min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
         grad_x = grad_output*(x>min_act)
 
-        m =torch.tensor(0.00001).cuda()
-        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+        m =torch.tensor(1e-6).cuda()
+        
+        # assert False, torch.sum((torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m)/torch.log(base)), -2*q_x*(x-q_x)/base*(round-(torch.log(x)/torch.log(base)))))
+        # n_non_zero = torch.count_nonzero(x).float()
+        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m)/torch.log(base)), -2*q_x*(x-q_x)/base*(round-(torch.log(x)/torch.log(base))))).view(-1)
+        # if n_non_zero == 0:
+        #     grad_base = torch.mean(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m)/torch.log(base)), -2*q_x*(x-q_x)/base*(round-(torch.log(x)/torch.log(base))))).view(-1)
+        # else:
+        #     grad_base = (torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m)/torch.log(base)), -2*q_x*(x-q_x)/base*(round-(torch.log(x)/torch.log(base))))).view(-1))/n_non_zero
         # grad_base_2 = (torch.where(x < min_act, -0*q_x*(x-q_x)*, -2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
-        return grad_x, None, grad_base, None
+        return grad_x, None, None, grad_base, None
         
         # k = 1000
         # time = ctx.constant
@@ -93,7 +97,7 @@ class log_quantize(InplaceFunction):
 # edit here
 class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, alpha, base, time_step):
+    def forward(ctx, x, alpha, base, tmp_base, time_step):
         y = torch.clamp(x, min=0., max=alpha.item())
         normed_ofm = (y / alpha)
         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
@@ -106,16 +110,20 @@ class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm):
         x, alpha, base, round = ctx.saved_variables
-        lt0      = x < 0
-        gta      = x > alpha
-        gi       = (~(lt0|gta)).float()
-        grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1) 
-        grad_x   = grad_output * gi
-        x = torch.clamp(x, min=0., max=alpha.item()) / alpha
         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
-        min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
         
-        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)*round, -2*q_x*(x-q_x)*(round-torch.log(x))/torch.log(base))).view(-1)
+        min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
+        lt0      = x < 0
+        ltm      = x < min_act
+        gta      = x > alpha
+        gi       = (~(ltm|gta)).float()
+        
+        grad_x   = grad_output * gi
+        grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        x = torch.clamp(x, min=0., max=alpha.item())
+        x = x / alpha
+        m =torch.tensor(1e-6).cuda()
+        grad_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
         #grad_base = torch.sum(x*(x-q_x)*base**(-2/3)*(x>0)).view(-1)
         #grad_base = torch.sum(-(x - q_x)*x*(x>0)).view(-1)/torch.sqrt(base)/alpha
         
@@ -137,7 +145,7 @@ class PACT_log_quantize(torch.autograd.Function):
         #grad_base = torch.sum(torch.where(x<min_act, -grad_output*(x>0).float(), 1/2*grad_output/math.sqrt(base))).view(-1) # grad_output*x*(1-base)/(math.sqrt(base)*(1+base)**2)
         #grad_base = torch.sum(torch.where(x<min_act, grad_output*0, grad_output*0)).view(-1)
 
-        return grad_x, grad_alpha, grad_base, None 
+        return grad_x, grad_alpha, None, grad_base, None 
 
 class PACT(nn.Module):
     def __init__(self, alpha=5.):
@@ -148,19 +156,21 @@ class PACT(nn.Module):
         qinput = pact_function.apply(input, self.alpha, 0, -3)
         return qinput
 
+"""
 # edit here
 # split training alpha and base with seperate functions
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2.5, time_step=4):
+    def __init__(self, alpha=5., base=2.0, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
+        self.tmp_base = nn.Parameter(torch.Tensor([0.]), requires_grad=False)
         self.time_step = time_step
         
     def forward(self, input):
         qinput = pact_function.apply(input, self.alpha, self.time_step)
         self.normed_ofm = (qinput / self.alpha)
-        qinput = log_quantize.apply(qinput, self.alpha, self.base, self.time_step)
+        qinput = log_quantize.apply(qinput, self.alpha, self.base, self.tmp_base, self.time_step)
         return qinput
     
 """
@@ -171,14 +181,14 @@ class PACT_with_log_quantize(nn.Module):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
+        self.tmp_base = nn.Parameter(torch.Tensor([0.]), requires_grad=False)
         self.time_step = time_step
         
     def forward(self, input):
-        qinput, normed_output = PACT_log_quantize.apply(input, self.alpha, self.base, self.time_step)
+        qinput, normed_output = PACT_log_quantize.apply(input, self.alpha, self.base, self.tmp_base, self.time_step)
         self.normed_ofm = normed_output
         return qinput
 
-"""
 
 
 """ 
