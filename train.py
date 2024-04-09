@@ -174,10 +174,10 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_base
             print('alpha', alpha)
         
         if epoch >= args.warmup:
-            base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
-            base_grad, _ = utils.print_base_grad(model, [])
-            for i in range(len(base)):
-                print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
+            # base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
+            # base_grad, _ = utils.print_base_grad(model, [])
+            # for i in range(len(base)):
+            #     print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
             if step == len(train_queue) - 1:
                 utils.update_base(model, len(train_queue) - 1)
                 base, _ = utils.print_base(model, [])
