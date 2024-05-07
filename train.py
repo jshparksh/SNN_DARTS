@@ -83,7 +83,7 @@ def main():
         shuffle=True, pin_memory=True, num_workers=args.workers)
     
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
-    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
+    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.base_fix_epoch, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
@@ -111,9 +111,9 @@ def main():
         min_base, max_base, _ = utils.print_min_max_base(model, 1e6, 0)
         logger.info('min_alpha %f', min_alpha)
         logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
-        if not os.path.exists(os.path.join(args.path, str(epoch))):
-            os.mkdir(os.path.join(args.path, str(epoch)))
-        #utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
+        # if not os.path.exists(os.path.join(args.path, str(epoch))):
+        #     os.mkdir(os.path.join(args.path, str(epoch)))
+        # utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
 def train(train_queue, model, model_params, criterion, optimizer, optimizer_base, epoch):
     losses = utils.AverageMeter()
@@ -170,20 +170,27 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_base
                 "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                     epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
                     top1=top1, top5=top5))
-            alpha, _ = utils.print_minimum_alpha(model, 1e6)
-            print('alpha', alpha)
+            min_alpha, _ = utils.print_minimum_alpha(model, 1e6)
+            print('min_alpha', min_alpha, 'step', step)
+            alpha, _ = utils.print_alpha(model, [])
+            base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
+            base_grad, _ = utils.print_base_grad(model, [])
+            for i in range(len(base)):
+                print(alpha[i][0], alpha[i][1])
+            for i in range(len(base)):
+                print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
         
         if epoch >= args.warmup:
             # base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
             # base_grad, _ = utils.print_base_grad(model, [])
             # for i in range(len(base)):
             #     print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
-            if step == len(train_queue) - 1:
-                utils.update_base(model, len(train_queue) - 1)
-                base, _ = utils.print_base(model, [])
-                base_grad, _ = utils.print_base_grad(model, [])
-                for i in range(len(base)):
-                    print(base[i][0], base[i][1], base_grad[i][1])
+            # if step == len(train_queue) - 1:
+            utils.update_base(model, len(train_queue) - 1)
+            # base, _ = utils.print_base(model, [])
+            # base_grad, _ = utils.print_base_grad(model, [])
+            # for i in range(len(base)):
+            #     print(base[i][0], base[i][1], base_grad[i][1])
     return top1.avg, losses.avg
 
 

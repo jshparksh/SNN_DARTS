@@ -133,8 +133,6 @@ def print_alpha(model, alpha, op_name='stem'):
         if hasattr(module, "_modules"):
             if hasattr(module, "op_type"):
                 op_name = module.op_type
-            else:
-                op_name = 'stem'
             alpha, model._modules[name] = print_alpha(module, alpha, op_name=op_name)
             
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
@@ -170,8 +168,6 @@ def print_base_grad(model, tmp_base, op_name='stem'):
         if hasattr(module, "_modules"):
             if hasattr(module, "op_type"):
                 op_name = module.op_type
-            else:
-                op_name = 'stem'
             tmp_base, model._modules[name] = print_base_grad(module, tmp_base, op_name=op_name)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
             tmp_base.append([op_name, round(model._modules[name].tmp_base.grad.item(), 5)])
@@ -182,8 +178,6 @@ def print_base(model, base, op_name='stem'):
         if hasattr(module, "_modules"):
             if hasattr(module, "op_type"):
                 op_name = module.op_type
-            else:
-                op_name = 'stem'
             base, model._modules[name] = print_base(module, base, op_name=op_name)
             
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :

@@ -93,6 +93,39 @@ class log_quantize(InplaceFunction):
         # return grad_x, None, grad_base, None
 
 # edit here
+# class PACT_log_quantize(torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, x, alpha, base, tmp_base, time_step):
+#         y = torch.clamp(x, min=0., max=alpha.item())
+#         normed_ofm = (y / alpha)
+#         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
+#         round = torch.round(log_value)
+#         ctx.save_for_backward(x, alpha, base, round)
+#         ctx.constant = time_step
+#         y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha
+#         return y, normed_ofm
+    
+#     @staticmethod
+#     def backward(ctx, grad_output, grad_normed_ofm):
+#         x, alpha, base, round = ctx.saved_variables #round value can be lower than time_step
+        
+#         min_act = alpha * (base**(-ctx.constant)+base**(1-ctx.constant))/2
+#         # lt0      = x < 0
+#         ltm      = x < min_act
+#         gta      = x > alpha
+#         gi       = (~(ltm|gta)).float()
+        
+#         q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
+#         m =torch.tensor(1e-10).cuda()
+        
+#         grad_x = grad_output * gi
+#         grad_alpha = torch.sum(grad_output*x.ge(min_act).float()).view(-1)
+#         grad_tmp_base = torch.mean(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+#         #grad_tmp_base = torch.sum(torch.where((x >= min_act) & (x < alpha), -grad_output*x/2/base**(3/2), grad_output*0)).view(-1) # -torch.log(cs_x)/torch.log(base)/2
+#         return grad_x, grad_alpha, None, grad_tmp_base, None
+    
+
+# edit here
 class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha, base, tmp_base, time_step):
@@ -100,6 +133,7 @@ class PACT_log_quantize(torch.autograd.Function):
         normed_ofm = (y / alpha)
         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
         round = torch.round(log_value)
+        round = torch.where(round==0, round-1, round)
         ctx.save_for_backward(x, alpha, base, round)
         ctx.constant = time_step
         y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha
@@ -107,26 +141,46 @@ class PACT_log_quantize(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm):
-        x, alpha, base, round = ctx.saved_variables
+        x, alpha, base, round = ctx.saved_variables #round value can be lower than time_step
         
-        min_act = (base**(-ctx.constant)+base**(1-ctx.constant))/2
-        lt0      = x < 0
+        min_act = alpha * (base**(-ctx.constant)+base**(1-ctx.constant))/2
+        # lt0      = x < 0
         ltm      = x < min_act
         gta      = x > alpha
-        gi       = (~(ltm|gta)).float()
+        gtab     = x > alpha*base**(-1)
+        gi       = (~(ltm|gtab)).float()
         
-        grad_x   = grad_output * gi
+        grad_x = grad_output * gi
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        grad_tmp_base = torch.sum(grad_output*x.le(min_act).float()+grad_output*x.ge(alpha*base**(-1)).float()).view(-1)
+        
+        # c_x = torch.clamp(x, min=0., max=alpha.item())
+        # cs_x = c_x / alpha
+        # q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
+        # m =torch.tensor(1e-10).cuda()
+        # k = 20 # term for round function's step function approximation using sigmoid 
+        # term_for_grad = (k*torch.exp(-k*(x/alpha + (-base**(round - 1) - base**round)/2)))/((torch.exp(-k*(x/alpha + (-base**(round - 1) - base**round))/2) + 1)**2)
+        # grad_x = torch.where(x==0. , grad_output*0, grad_output*gi*alpha*base**round/x/2) # alpha eliminated
+        # grad_alpha = torch.sum(grad_output*x.ge(alpha)+grad_output*gi*base**round/2).view(-1)
+        # grad_tmp_base = torch.sum(torch.where((x >= min_act) & (x < alpha), grad_output*alpha*base**(round-1)*(round), grad_output*0)).view(-1) # -torch.log(cs_x)/torch.log(base)/2
         
         
-        x = torch.clamp(x, min=0., max=alpha.item())
-        x = x / alpha
-        q_x = torch.where(round > -ctx.constant, base**round, torch.tensor(0.,).cuda())
-        m =torch.tensor(1e-10).cuda()
-        grad_tmp_base = torch.sum(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+        
+        
+        # grad_x = torch.where(x==0. , grad_output*0, grad_output*gi*base**(-1/2)) # alpha eliminated
+        # grad_alpha = torch.sum(grad_output*x.ge(alpha)-grad_output*gi*base**round/2).view(-1)
+        # grad_tmp_base = torch.sum(torch.where((x >= min_act) & (x < alpha), -grad_output*x/2/base**(3/2), grad_output*0)).view(-1) # -torch.log(cs_x)/torch.log(base)/2
+        # grad_x = torch.where(x==0. , grad_output*0, grad_output*gi*base**round*term_for_grad/x) # alpha eliminated /torch.log(base)
+        # grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)# torch.sum(grad_output*x.ge(alpha)-grad_output*gi*base**round*(-term_for_grad*x/alpha**2)).view(-1)
+        # grad_tmp_base = torch.mean(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
+        # grad_tmp_base = torch.sum(torch.where((x >= min_act) & (x < alpha), grad_output*gi*alpha*base**(round-1)*(round-torch.log(cs_x)/torch.log(base)*term_for_grad*(-(round-1)*(base**(round-2)-round*base**(round-1))/2)), grad_output*0)).view(-1)
+        # grad_tmp_base = torch.sum(grad_output*gi*alpha*base**(round-1)*(round-torch.log(cs_x)/torch.log(base)*term_for_grad*(-(round-1)*(base**(round-2)-round*base**(round-1))/2))).view(-1)
+        # grad_x   = grad_output * gi
+        # grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        # grad_tmp_base = torch.mean(torch.where(x < min_act, -2*q_x*(x-q_x)/base*(torch.log(m))/torch.log(base), (base>1)*-2*q_x*(x-q_x)/base*(round-torch.log(x))/(torch.log(base)))).view(-1)
         #grad_base = torch.sum(x*(x-q_x)*base**(-2/3)*(x>0)).view(-1)
         #grad_base = torch.sum(-(x - q_x)*x*(x>0)).view(-1)/torch.sqrt(base)/alpha
-        return grad_x, grad_alpha, None, grad_tmp_base, None 
+        return grad_x, grad_alpha, None, grad_tmp_base, None
     
         # min_act = alpha*(base**(-ctx.constant)+base**(1-ctx.constant))/2
         # m = 1e-1
@@ -156,6 +210,7 @@ class PACT(nn.Module):
         qinput = pact_function.apply(input, self.alpha, 0, -3)
         return qinput
 
+"""
 # edit here
 # split training alpha and base with seperate functions
 class PACT_with_log_quantize(nn.Module):
@@ -176,7 +231,7 @@ class PACT_with_log_quantize(nn.Module):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2.0, time_step=16):
+    def __init__(self, alpha=2., base=2.0, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
@@ -188,7 +243,6 @@ class PACT_with_log_quantize(nn.Module):
         self.normed_ofm = normed_output
         return qinput
 
-"""
 
 
 """ 

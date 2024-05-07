@@ -93,12 +93,12 @@ base_params, model_params = utils.split_params(net)
 criterion = nn.CrossEntropyLoss()
 #optimizer = optim.SGD(model.parameters(), lr=0.025, momentum=0.9)
 optimizer = optim.SGD(model_params, lr=0.025, momentum=0.9)
-optimizer_base = optim.SGD(base_params, lr=0.25, momentum=0.9)
+optimizer_base = optim.SGD(base_params, lr=1)
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 1000, eta_min=0.001)
 scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, 1000, eta_min=0.001)
 # Training loop
-utils.base_mode_switch(net)
+utils.param_mode_switch(net)
 for epoch in range(1000):  # loop over the dataset multiple times
     running_loss = 0.0
     correct = 0
@@ -126,10 +126,14 @@ for epoch in range(1000):  # loop over the dataset multiple times
             print('[%d, %5d] loss: %.3f' %
                   (epoch + 1, i + 1, running_loss / 200))
             running_loss = 0.0
+            alpha, _ = utils.print_minimum_alpha(net, 1e6)
+            print('alpha', alpha)
             base, _ = utils.print_base(net, [])
             base_grad, _ = utils.print_base_grad(net, [])
             for i in range(len(base)):
                 print(base[i][0], base[i][1], base_grad[i][1])
+        
+        utils.update_base(net, len(trainloader)-1)
     epoch_accuracy = 100 * correct / total
     print('Epoch %d: Accuracy on the training images: %d %%' % (epoch + 1, epoch_accuracy))
     
