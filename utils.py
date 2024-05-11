@@ -224,14 +224,16 @@ def base_mode_switch(model, grad_bool=True):
     return model
 
 def split_params(model):
-    tmp_base_params = []
+    alpha_base_params = []
     base_params = []
     other_params = []
     for name, param in model.named_parameters():
         if 'tmp_base' in name:
-            tmp_base_params.append(param)
+            alpha_base_params.append(param)
+        elif 'alpha' in name:
+            other_params.append(param)
         elif 'base' in name:
-            base_params.append(param)
+            alpha_base_params.append(param)
         else:
             other_params.append(param)
-    return tmp_base_params, other_params
+    return alpha_base_params, other_params

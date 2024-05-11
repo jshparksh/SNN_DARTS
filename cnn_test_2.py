@@ -128,8 +128,11 @@ for epoch in range(1000):  # loop over the dataset multiple times
             running_loss = 0.0
             alpha, _ = utils.print_minimum_alpha(net, 1e6)
             print('alpha', alpha)
+            alpha, _ = utils.print_alpha(net, [])
             base, _ = utils.print_base(net, [])
             base_grad, _ = utils.print_base_grad(net, [])
+            for i in range(len(base)):
+                print(alpha[i][0], alpha[i][1])
             for i in range(len(base)):
                 print(base[i][0], base[i][1], base_grad[i][1])
         
