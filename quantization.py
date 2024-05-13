@@ -58,7 +58,7 @@ class log_quantize(InplaceFunction):
         lta      = x < alpha
         gta      = x > alpha
         grad_x = grad_output * gtm
-        grad_alpha = torch.sum(grad_output * x.ge(min_act) * x.lt(alpha) * base**round + grad_output * x.ge(alpha)).view(-1)
+        grad_alpha = torch.sum(grad_output * x.ge(min_act) * x.lt(alpha) * base**round).view(-1)
         grad_tmp_base = torch.sum(grad_output * x.ge(min_act) * x.lt(alpha) * alpha * round * base**(round-1)).view(-1)
         # if err_past != 0:
         #     grad_tmp_base = torch.sum(grad_output*(err_curr-err_past)).view(-1)
@@ -79,7 +79,7 @@ class PACT(nn.Module):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=3., base=2.0, time_step=16):
+    def __init__(self, alpha=3., base=2.0, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
