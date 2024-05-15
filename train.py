@@ -61,17 +61,23 @@ def main():
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
     # split model parameters into two groups
-    base_params, model_params = utils.split_params(model)
-    # sparate optimizer for base and model
+    alpha_params, base_params, model_params = utils.split_params(model)
+    # sparate optimizer for alpha, base and model
     optimizer = torch.optim.SGD(
         model_params,
         args.learning_rate,
         momentum=args.momentum,
         weight_decay=args.weight_decay
         )
+    optimizer_alpha = torch.optim.SGD(
+        alpha_params,
+        args.learning_rate_base,
+        momentum=args.momentum
+    )
     optimizer_base = torch.optim.SGD(
         base_params,
-        args.learning_rate_base
+        args.learning_rate_base,
+        momentum=args.momentum,
         )
     
     train_queue = torch.utils.data.DataLoader(
@@ -83,6 +89,7 @@ def main():
         shuffle=True, pin_memory=True, num_workers=args.workers)
     
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
+    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs, eta_min=args.learning_rate_min_base)
     scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.base_fix_epoch, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
@@ -96,11 +103,13 @@ def main():
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
         #logger.info('Epoch: %d lr: %e', epoch, current_lr)
+        scheduler_alpha.step()
+        current_alpha_lr = scheduler_alpha.get_lr()[0]
         scheduler_base.step()
         current_base_lr = scheduler_base.get_lr()[0]
         logger.info('Epoch: %d lr: %e baselr: %e', epoch, current_lr, current_base_lr)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-        train_acc, train_obj = train(train_queue, model, model_params, criterion, optimizer, optimizer_base, epoch)
+        train_acc, train_obj = train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch)
         logger.info('train_acc {:.4%}'.format(train_acc))
 
         valid_acc, valid_obj = infer(valid_queue, model, criterion, epoch)
@@ -115,13 +124,14 @@ def main():
         #     os.mkdir(os.path.join(args.path, str(epoch)))
         # utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
-def train(train_queue, model, model_params, criterion, optimizer, optimizer_base, epoch):
+def train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch):
     losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
     model.train()
  
     global init_energy
+    update_step = 1
     for step, (input, target) in enumerate(train_queue):
         n = input.size(0)
 
@@ -129,6 +139,7 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_base
         target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
+        optimizer_alpha.zero_grad()
         optimizer_base.zero_grad()
         logits, spike_E = model(input)
         
@@ -155,42 +166,38 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_base
         loss.backward()
         nn.utils.clip_grad_norm(model_params, args.grad_clip)
         optimizer_base.step()
+        optimizer_alpha.step()
         optimizer.step()
         prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         losses.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
 
-        if step % args.print_freq == 0:
-            # logger.info(
-            #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-            #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
-            #         top1=top1, top5=top5))
-            logger.info(
-                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
-                    top1=top1, top5=top5))
-            min_alpha, _ = utils.print_minimum_alpha(model, 1e6)
-            print('min_alpha', min_alpha, 'step', step)
-            alpha, _ = utils.print_alpha(model, [])
-            base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
-            base_grad, _ = utils.print_base_grad(model, [])
-            for i in range(len(base)):
-                print(alpha[i][0], alpha[i][1])
-            for i in range(len(base)):
-                print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
-        
         if epoch >= args.warmup:
-            # base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
-            # base_grad, _ = utils.print_base_grad(model, [])
-            # for i in range(len(base)):
-            #     print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
-            # if step == len(train_queue) - 1:
-            utils.update_base(model, len(train_queue) - 1)
-            # base, _ = utils.print_base(model, [])
-            # base_grad, _ = utils.print_base_grad(model, [])
-            # for i in range(len(base)):
-            #     print(base[i][0], base[i][1], base_grad[i][1])
+            if step % args.print_freq == 0:
+                # logger.info(
+                #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
+                #         top1=top1, top5=top5))
+                logger.info(
+                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                        epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+                        top1=top1, top5=top5))
+                min_alpha, _ = utils.print_minimum_alpha(model, 1e6)
+                print('min_alpha', min_alpha, 'step', step)
+                alpha, _ = utils.print_alpha(model, [])
+                alpha_grad, _ = utils.print_alpha_grad(model, [])
+                base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
+                base_grad, _ = utils.print_base_grad(model, [])
+                print('-----------------alpha-----------------')
+                for i in range(len(base)):
+                    print(alpha[i][0], alpha[i][1], alpha_grad[i][1])
+                print('-----------------base-----------------')
+                for i in range(len(base)):
+                    print(base[i][0], base[i][1], tmp_base[i][1], base_grad[i][1])
+            
+            if step != 0 and step % update_step == 0:
+                utils.update_base(model, update_step)
     return top1.avg, losses.avg
 
 
