@@ -14,21 +14,16 @@ from torch.autograd import Variable
 """
 
 class pact_function(InplaceFunction):
-    # See https://github.com/obilaniu/GradOverride/blob/master/functional.py
-    # See https://arxiv.org/pdf/1805.06085.pdf
     @staticmethod
     def forward(ctx, x, alpha):
         ctx.save_for_backward(x, alpha)
-        y = torch.clamp(x, min=0., max=alpha.item()) #alpha.item()*base.item()**(-time_step), max=alpha.item())
+        y = torch.clamp(x, min=0., max=alpha.item())
         return y
     
     @staticmethod
     def backward(ctx, grad_output):
         x, alpha = ctx.saved_variables
-        """
-        Same to : grad_input[x < 0] = 0.
-                  grad_input[alpha < x] = 0.
-        """
+        
         # Gradient of x ( 0 <= x <= alpha )
         lt0      = x < 0
         gta      = x > alpha

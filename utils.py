@@ -139,6 +139,16 @@ def print_alpha(model, alpha, op_name='stem'):
             alpha.append([op_name, round(model._modules[name].alpha.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return alpha, model
 
+def print_alpha_grad(model, alpha, op_name='stem'):
+    for name, module in model._modules.items():
+        if hasattr(module, "_modules"):
+            if hasattr(module, "op_type"):
+                op_name = module.op_type
+            alpha, model._modules[name] = print_alpha_grad(module, alpha, op_name=op_name)
+        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            alpha.append([op_name, round(model._modules[name].alpha.grad.item(), 5)])
+    return alpha, model
+
 def print_minimum_alpha(model, min_alpha):
     for name, module in model._modules.items():
         if hasattr(module, "_modules"):
@@ -224,16 +234,16 @@ def base_mode_switch(model, grad_bool=True):
     return model
 
 def split_params(model):
-    alpha_base_params = []
+    alpha_params = []
     base_params = []
     other_params = []
     for name, param in model.named_parameters():
         if 'tmp_base' in name:
-            alpha_base_params.append(param)
+            base_params.append(param)
         elif 'alpha' in name:
-            other_params.append(param)
+            alpha_params.append(param)
         elif 'base' in name:
-            alpha_base_params.append(param)
+            base_params.append(param)
         else:
             other_params.append(param)
-    return alpha_base_params, other_params
+    return alpha_params, base_params, other_params
