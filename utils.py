@@ -230,6 +230,7 @@ def base_mode_switch(model, grad_bool=True):
         if hasattr(module, "_modules"):
             model._modules[name] = base_mode_switch(module, grad_bool)
         if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+            model._modules[name].alpha.requires_grad = grad_bool
             model._modules[name].tmp_base.requires_grad = grad_bool
     return model
 

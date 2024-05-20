@@ -49,9 +49,9 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--load_epoch', type=str, default=0, help='load pretrained model from specific epoch')
         parser.add_argument('--batch_size', type=int, default=128, help='batch size')
         parser.add_argument('--learning_rate', type=float, default=0.025, help='lr for weights')
-        parser.add_argument('--learning_rate_base', type=float, default=0.025, help='lr for base')
+        parser.add_argument('--learning_rate_base', type=float, default=1, help='lr for base')
         parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
-        parser.add_argument('--learning_rate_min_base', type=float, default=0.001, help='min learning rate for base')
+        parser.add_argument('--learning_rate_min_base', type=float, default=0.05, help='min learning rate for base')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum for weights')
         parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay for weights')
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
@@ -70,8 +70,8 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
         parser.add_argument('--spike_bool', type=bool, default=False, help='to check status of training with spike loss')
         parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
-        parser.add_argument('--warmup', type=int, default=5, help='base requires_grad switch into true')
-        parser.add_argument('--base_fix_epoch', type=int, default=50, help='base requires_grad switch into false')
+        parser.add_argument('--warmup', type=int, default=5, help='alpha, base requires_grad switch into true')
+        parser.add_argument('--alpha_base_fix_epoch', type=int, default=50, help='alpha & base requires_grad switch into false')
 
         return parser
 
@@ -96,9 +96,9 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--load_epoch', type=str, default='0', help='load pretrained model from specific epoch')
         parser.add_argument('--batch_size', type=int, default=512, help='batch size')
         parser.add_argument('--learning_rate', type=float, default=0.025, help='lr for weights')
-        parser.add_argument('--learning_rate_base', type=float, default=0.01, help='lr for base')
+        parser.add_argument('--learning_rate_base', type=float, default=0.1, help='lr for base')
         parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
-        parser.add_argument('--learning_rate_min_base', type=float, default=0.0005, help='min learning rate for base')
+        parser.add_argument('--learning_rate_min_base', type=float, default=0.005, help='min learning rate for base')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
         parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
         parser.add_argument('--print_freq', type=int, default=1, help='print frequency')
@@ -116,8 +116,8 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
         parser.add_argument('--drop_path_prob', type=float, default=0, help='drop path prob')
         parser.add_argument('--timestep', type=int, default=4, help='timestep for logarithmic spike')
-        parser.add_argument('--warmup', type=int, default=5, help='base requires_grad switch into true')
-        parser.add_argument('--base_fix_epoch', type=int, default=100, help='base requires_grad switch into false')
+        parser.add_argument('--warmup', type=int, default=5, help='alpha, base requires_grad switch into true')
+        parser.add_argument('--alpha_base_fix_epoch', type=int, default=100, help='alpha & base requires_grad switch into false')
 
         return parser
 

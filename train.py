@@ -71,13 +71,11 @@ def main():
         )
     optimizer_alpha = torch.optim.SGD(
         alpha_params,
-        args.learning_rate_base,
-        momentum=args.momentum
+        args.learning_rate_base
     )
     optimizer_base = torch.optim.SGD(
         base_params,
-        args.learning_rate_base,
-        momentum=args.momentum,
+        args.learning_rate_base
         )
     
     train_queue = torch.utils.data.DataLoader(
@@ -89,15 +87,15 @@ def main():
         shuffle=True, pin_memory=True, num_workers=args.workers)
     
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
-    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs, eta_min=args.learning_rate_min_base)
-    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.base_fix_epoch, eta_min=args.learning_rate_min_base)
+    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.alpha_base_fix_epoch, eta_min=args.learning_rate_min_base)
+    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.alpha_base_fix_epoch, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
         if epoch == args.warmup:
             model = utils.param_mode_switch(model)
             
-        if epoch == args.base_fix_epoch:
+        if epoch == args.alpha_base_fix_epoch:
             model = utils.base_mode_switch(model, grad_bool=False)
         
         scheduler.step()
@@ -149,8 +147,8 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
         
         # edit here
         # fix base for each cell
-        for cell in model.module.cells: #module.cells:
-            cell.set_base()
+        # for cell in model.module.cells: #module.cells:
+        #     cell.set_base()
             
         """
         if epoch >= args.warmup:
@@ -172,17 +170,12 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
         losses.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
-
+        logger.info(
+            "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+                top1=top1, top5=top5))
         if epoch >= args.warmup:
             if step % args.print_freq == 0:
-                # logger.info(
-                #     "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                #         epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses,
-                #         top1=top1, top5=top5))
-                logger.info(
-                    "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                        epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
-                        top1=top1, top5=top5))
                 min_alpha, _ = utils.print_minimum_alpha(model, 1e6)
                 print('min_alpha', min_alpha, 'step', step)
                 alpha, _ = utils.print_alpha(model, [])

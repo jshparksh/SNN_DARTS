@@ -94,7 +94,8 @@ class PACT(nn.Module):
 class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha, base, tmp_base, time_step, err_past):
-        c_x = torch.clamp(x, min=0., max=alpha.item()*base.item()**(-1)) # clamp activation value between 0 and alpha*base**(-1)
+        # Clamping with alpha*base**(-1)
+        c_x = torch.clamp(x, min=0., max=alpha.item()*base.item()**(-1)) 
         normed_ofm = (c_x / (alpha*base**(-1)))
         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
         round = torch.round(log_value)
@@ -104,45 +105,47 @@ class PACT_log_quantize(torch.autograd.Function):
         ctx.constant = time_step
         return q_y, normed_ofm, err_curr
 
-        # y = torch.clamp(x, min=0., max=alpha.item())
-        # normed_ofm = (y / alpha)
+        # # Clamping with alpha
+        # c_x = torch.clamp(x, min=0., max=alpha.item()) # clamp activation value between 0 and alpha*base**(-1)
+        # normed_ofm = (c_x / alpha)
         # log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
         # round = torch.round(log_value)
         # q_y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha
-        # err_curr = torch.sum(torch.abs((x-q_y))).view(-1)
-        # ctx.save_for_backward(x, alpha, base, err_past, err_curr)
+        # err_curr = torch.sum(torch.abs((c_x-q_y))).view(-1)
+        # ctx.save_for_backward(x, log_value, alpha, base, round, err_past, err_curr)
         # ctx.constant = time_step
-        # return q_y, normed_ofm, err_curr
+        return q_y, normed_ofm, err_curr
     
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm, grad_err_curr):
-        x, log_value, alpha, base, round, err_past, err_curr = ctx.saved_variables #round value can be lower than time_step
+        x, log_value, alpha, base, round, err_past, err_curr = ctx.saved_variables #round value can be lower than time_step in underflow region
         
-        min_act = alpha * base**(-1) * (base**(-ctx.constant)+base**(1-ctx.constant))/2
-        max_act = alpha * base**(-1) * (base**0+base**(-1))/2
+        min_act = alpha * base**(-1) * (base**((-ctx.constant+1-ctx.constant)/2))
+        max_act = alpha * base**(-1) * (base**((0-1)/2))
         ltmin      = x < min_act
         gemax      = x >= max_act
         gi       = (~(ltmin|gemax)).float()
-        # gi         = (~ltmin).float()
         
         # STE
         grad_x = torch.where(x==0, torch.tensor(0.,).cuda(), grad_output * gi * alpha * base**(round-1) / x)
         grad_alpha = torch.sum(grad_output * x.ge(max_act) * base**(-1)).view(-1)
         grad_tmp_base = torch.sum(grad_output * x.ge(min_act) * x.lt(max_act) * alpha * base**(round-2) * (-log_value + round) - grad_output * x.ge(max_act) * alpha / (base**2)).view(-1)
         
-        # 0514
-        # grad_x = grad_output * gi
-        # grad_alpha = torch.sum(grad_output * x.ge(min_act) * x.lt(max_act) * base**(round-1) + grad_output * x.ge(max_act) * base**(-1)).view(-1)
-        # grad_tmp_base = torch.sum(grad_output * x.ge(min_act) * x.lt(max_act) * alpha * (round-1) * base**(round-2) - grad_output * x.ge(max_act) * alpha / (base**2)).view(-1)
+        # x, log_value, alpha, base, round, err_past, err_curr = ctx.saved_variables #round value can be lower than time_step in underflow region
         
+        # min_act = alpha * base**(-1) * (base**((-ctx.constant+1-ctx.constant)/2))
+        # max_act = alpha * base**(-1) * (base**(0-1)/2)
+        # ltmin      = x < min_act
+        # gemax      = x >= max_act
+        # gi       = (~(ltmin|gemax)).float()
         
-        # grad_alpha = torch.sum(grad_output * x.ge(min_act) * x.lt(alpha) * base**round + grad_output * x.ge(alpha)).view(-1)
-        # grad_tmp_base = torch.sum(grad_output * x.ge(min_act) * x.lt(alpha) * alpha * round * base**(round-1)).view(-1)
-        # if err_past != 0:
-        #     grad_tmp_base = torch.sum(grad_output*(err_curr-err_past)).view(-1)
-        # else:
-        #     grad_tmp_base = torch.sum(grad_output*0).view(-1)
+        # # STE
+        # grad_x = torch.where(x==0, torch.tensor(0.,).cuda(), grad_output * gi * alpha * base**(round) / x)
+        # grad_alpha = torch.sum(grad_output * x.ge(max_act)).view(-1)
+        # grad_tmp_base = torch.sum(grad_output * x.ge(min_act) * x.lt(max_act) * alpha * base**(round-1) * (-log_value + round)).view(-1)
+        
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
+    
     
 # edit here
 # combined function which trains alpha and base together
