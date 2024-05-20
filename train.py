@@ -71,7 +71,7 @@ def main():
         )
     optimizer_alpha = torch.optim.SGD(
         alpha_params,
-        args.learning_rate_base
+        args.learning_rate_alpha
     )
     optimizer_base = torch.optim.SGD(
         base_params,
@@ -87,16 +87,16 @@ def main():
         shuffle=True, pin_memory=True, num_workers=args.workers)
     
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
-    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.alpha_base_fix_epoch, eta_min=args.learning_rate_min_base)
-    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.alpha_base_fix_epoch, eta_min=args.learning_rate_min_base)
+    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs, eta_min=args.learning_rate_min_alpha)
+    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):
         if epoch == args.warmup:
             model = utils.param_mode_switch(model)
             
-        if epoch == args.alpha_base_fix_epoch:
-            model = utils.base_mode_switch(model, grad_bool=False)
+        # if epoch == args.alpha_base_fix_epoch:
+        #     model = utils.base_mode_switch(model, grad_bool=False)
         
         scheduler.step()
         current_lr = scheduler.get_lr()[0]
