@@ -95,7 +95,7 @@ class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha, base, tmp_base, time_step, err_past):
         # Clamping with alpha*base**(-1)
-        c_x = torch.clamp(x, min=0., max=alpha.item()*base.item()**(-1)) 
+        c_x = torch.clamp(x, min=0., max=alpha.item()*base.item()**(-1))
         normed_ofm = (c_x / (alpha*base**(-1)))
         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
         round = torch.round(log_value)
@@ -150,7 +150,7 @@ class PACT_log_quantize(torch.autograd.Function):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=6., base=2.0, time_step=8):
+    def __init__(self, alpha=10., base=2.0, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
