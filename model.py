@@ -53,58 +53,84 @@ class Cell(nn.Module):
             s = h1 + h2
             states += [s]
         return torch.cat([states[i] for i in self._concat], dim=1)
-
-    def set_base(self):
+    
+    def set_alpha_base(self):
+        alpha_tmp = 0
         base_tmp = 0
-        op_cnt = 0
+        alpha_cnt = 0
+        base_cnt = 0
         for op in self._ops:
             if op.op_type == 'zero':
                 pass
             if op.op_type == 'fr':
                 for seq in op.conv_1:
+                    if hasattr(seq, 'alpha'):
+                        alpha_tmp += seq.alpha.data
+                        alpha_cnt += 1
                     if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
-                        op_cnt += 1
+                        base_cnt += 1
                 for seq in op.conv_2:
+                    if hasattr(seq, 'alpha'):
+                        alpha_tmp += seq.alpha.data
+                        alpha_cnt += 1
                     if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
-                        op_cnt += 1
+                        base_cnt += 1
             else:
                 for seq in op.op:
+                    if hasattr(seq, 'alpha'):
+                        alpha_tmp += seq.alpha.data
+                        alpha_cnt += 1
                     if hasattr(seq, 'tmp_base'):
                         base_tmp += seq.base.data
-                        op_cnt += 1
+                        base_cnt += 1
         with torch.no_grad():
-            self.mean_base = base_tmp / op_cnt 
+            self.mean_alpha = alpha_tmp / alpha_cnt
+            self.mean_base = base_tmp / base_cnt 
             if self.preprocess0.op_type == 'fr':
                 for seq in self.preprocess0.conv_1:
+                    if hasattr(seq, 'alpha'):
+                        seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                     if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                 for seq in self.preprocess0.conv_2:
+                    if hasattr(seq, 'alpha'):
+                        seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                     if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                     
             elif self.preprocess0.op_type == 'rcb':
                 for seq in self.preprocess0.op:
+                    if hasattr(seq, 'alpha'):
+                        seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                     if hasattr(seq, 'tmp_base'):
                         seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
                 
             for seq in self.preprocess1.op:
+                if hasattr(seq, 'alpha'):
+                    seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                 if hasattr(seq, 'tmp_base'):
                     seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
             
             for op in self._ops:
                 if op.op_type == 'fr':
                     for seq in op.conv_1:
+                        if hasattr(seq, 'alpha'):
+                            seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                         if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
 
                     for seq in op.conv_2:
+                        if hasattr(seq, 'alpha'):
+                            seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                         if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
 
                 else:
                     for seq in op.op:
+                        if hasattr(seq, 'alpha'):
+                            seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                         if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
     
@@ -131,7 +157,7 @@ class NetworkCIFAR(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
             nn.BatchNorm2d(C_curr),
-            PACT_with_log_quantize()
+            PACT_with_log_quantize(time_step=args.time_step)
         )
         
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C

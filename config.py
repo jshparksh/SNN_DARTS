@@ -69,7 +69,7 @@ class SearchConfig(BaseConfig):
         parser.add_argument('--begin', type=int, default=15, help='batch size') # imagenet -> 35
         parser.add_argument('--spike_step', type=int, default=50, help='training with spike loss')
         parser.add_argument('--spike_bool', type=bool, default=False, help='to check status of training with spike loss')
-        parser.add_argument('--timestep', type=int, default=16, help='timestep for logarithmic spike')
+        parser.add_argument('--time_step', type=int, default=16, help='timestep for logarithmic spike')
         parser.add_argument('--warmup', type=int, default=5, help='alpha, base requires_grad switch into true')
         parser.add_argument('--alpha_base_fix_epoch', type=int, default=50, help='alpha & base requires_grad switch into false')
 
@@ -117,7 +117,7 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
         parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
         parser.add_argument('--drop_path_prob', type=float, default=0, help='drop path prob')
-        parser.add_argument('--timestep', type=int, default=4, help='timestep for logarithmic spike')
+        parser.add_argument('--time_step', type=int, default=4, help='timestep for logarithmic spike')
         parser.add_argument('--warmup', type=int, default=5, help='alpha, base requires_grad switch into true')
         parser.add_argument('--alpha_base_fix_epoch', type=int, default=100, help='alpha & base requires_grad switch into false')
 
