@@ -135,7 +135,7 @@ def print_alpha(model, alpha, op_name='stem'):
                 op_name = module.op_type
             alpha, model._modules[name] = print_alpha(module, alpha, op_name=op_name)
             
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+        if (hasattr(module, "alpha")) :  #and hasattr(module, "base") 
             alpha.append([op_name, round(model._modules[name].alpha.item(), 5)]) #round(model._modules[name].base.data, 5)]) #model._modules[name].base.item()])
     return alpha, model
 
