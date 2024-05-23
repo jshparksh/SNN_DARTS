@@ -40,7 +40,7 @@ class PACT(nn.Module):
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.relu = nn.ReLU(inplace=False)
     def forward(self, input):
-        qinput = pact_function.apply(input, self.alpha, 0, -3)
+        qinput = pact_function.apply(input, self.alpha)
         return qinput
 
 # edit here

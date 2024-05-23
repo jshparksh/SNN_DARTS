@@ -52,16 +52,17 @@ def main():
     genotype = eval("genotypes.%s" % args.arch)
     #model = Network(train_data)
     model = Network(args.init_channels, n_classes, args.layers, genotype)
-     
-    #model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
+    if args.load == True:
+        model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
     model = model.cuda()
     model = torch.nn.DataParallel(model, device_ids=args.gpus)
     logger.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
+    
     # split model parameters into two groups
     alpha_params, base_params, model_params = utils.split_params(model)
+    
     # sparate optimizer for alpha, base and model
     optimizer = torch.optim.SGD(
         model_params,
@@ -105,7 +106,7 @@ def main():
         current_alpha_lr = scheduler_alpha.get_lr()[0]
         scheduler_base.step()
         current_base_lr = scheduler_base.get_lr()[0]
-        logger.info('Epoch: %d lr: %e baselr: %e', epoch, current_lr, current_base_lr)
+        logger.info('Epoch: %d lr: %e alphalr: %e baselr: %e', epoch, current_lr, current_alpha_lr, current_base_lr)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
         train_acc, train_obj = train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch)
         logger.info('train_acc {:.4%}'.format(train_acc))
@@ -170,10 +171,11 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
         losses.update(loss.data.item(), n)
         top1.update(prec1.data.item(), n)
         top5.update(prec5.data.item(), n)
-        logger.info(
-            "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
-                epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
-                top1=top1, top5=top5))
+        if step % args.print_freq == 0:
+            logger.info(
+                "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
+                    epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
+                    top1=top1, top5=top5))
         if epoch >= args.warmup:
             if step % args.print_freq == 0:
                 min_alpha, _ = utils.print_minimum_alpha(model, 1e6)

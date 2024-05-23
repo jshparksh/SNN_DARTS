@@ -27,27 +27,25 @@ class Architect(object):
         else:
             loss = self._compute_loss(self.model, input_valid, target_valid, spike_bool)
         loss.backward()
-        self.normal_grad = self.model.module.alphas_normal.grad
-        self.reduce_grad = self.model.module.alphas_reduce.grad
+        # self.normal_grad = self.model.module.alphas_normal.grad
+        # self.reduce_grad = self.model.module.alphas_reduce.grad
     
     def _compute_loss(self, model, input_valid, target_valid, spike_bool):
         logit, spike_E = model(input_valid, spike_bool)
         loss = self.criterion(logit, target_valid)
         spike_E = spike_E.mean()
+        self.spike_E = spike_E
         # max_E at initial spike loss calculation for normalization
         if self.max_E == None: #epoch == self.spike_step:
             self.max_E = spike_E
         spike_loss = spike_E/(self.max_E.detach()) #detach() for preventing double backpropagation
-        lmd1 = 1
+        
+        lmd1 = 4/5
         lmd2 = 1/5
-        # for logging
-        self.loss = loss
-        self.spike_loss = spike_loss
         new_loss = lmd1*loss + lmd2*spike_loss
         
         # for logging
         self.loss = loss
-        self.spike_E = spike_E
         self.spike_loss = spike_loss
         self.arc_loss = new_loss
         

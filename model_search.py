@@ -70,10 +70,10 @@ class Cell(nn.Module):
         self.reduction = reduction
         
         if reduction_prev:
-            self.preprocess0 = FactorizedReduce(C_prev_prev, C, time_step=args.timestep, affine=False)
+            self.preprocess0 = FactorizedReduce(C_prev_prev, C, affine=False)
         else:
-            self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0, affine=False)
-        self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0, affine=False)
+            self.preprocess0 = ReLUConvBN(C_prev_prev, C, 1, 1, 0)
+        self.preprocess1 = ReLUConvBN(C_prev, C, 1, 1, 0)
         self._steps = steps
         self._multiplier = multiplier
         self._ops = nn.ModuleList()
@@ -121,13 +121,11 @@ class Network(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, 1, 1, bias=False),
             nn.BatchNorm2d(C_curr),
-            PACT_with_log_quantize(time_step=16)
+            PACT() #PACT_with_log_quantize(time_step=args.time_step)
         )
+        
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
-        
         self.cells = nn.ModuleList()
-        self._total_spike_energy = torch.Tensor([1]).cuda()
-        
         reduction_prev = False
         for i in range(layers):
             if i in [layers//3, 2*layers//3]:
