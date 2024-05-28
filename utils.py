@@ -16,23 +16,33 @@ def get_data(dataset, data_path, cutout_length):
     if dataset == 'cifar10':
         dset_cls = dset.CIFAR10
         n_classes = 10
+    elif dataset == 'cifar100':
+        dset_cls = dset.CIFAR100
+        n_classes = 100
+    elif dataset == 'imagenet':
+        dset_cls = dset.ImageFolder
+        n_classes = 1000
     elif dataset == 'mnist':
         dset_cls = dset.MNIST
         n_classes = 10
-    elif dataset == 'fashionmnist':
-        dset_cls = dset.FashionMNIST
-        n_classes = 10
     else:
         raise ValueError(dataset)
-
+        
     trn_transform, val_transform = preproc.data_transforms(dataset, cutout_length)
-    trn_data = dset_cls(root=data_path, train=True, download=True, transform=trn_transform)
-    val_data = dset_cls(root=data_path, train=False, download=True, transform=val_transform)
+    
+    if dataset == 'imagenet':
+        trainpath = os.path.join(data_path, 'train')
+        valpath = os.path.join(data_path, 'val')
+        trn_data = dset_cls(root=trainpath, transform=trn_transform)
+        val_data = dset_cls(root=valpath, transform=val_transform)
+    
+    else:
+        trn_data = dset_cls(root=data_path, train=True, download=True, transform=trn_transform)
+        val_data = dset_cls(root=data_path, train=False, download=True, transform=val_transform)
 
     ret = [n_classes, trn_data, val_data]
 
     return ret
-
 
 def get_logger(file_path):
     """ Make python logger """

@@ -1,5 +1,2 @@
-#python train.py --name 0318_alpha --batch_size 256 --warmup 3
-python train.py --name 0402_alpha --batch_size 256 --warmup 3 --gpus 0,1,2,3
-#python train.py --name 0314_alpha_allstem --batch_size 64 --warmup 3 --gpus 1
-#python train.py --name 0314_alpha_nostem --batch_size 64 --warmup 3 --gpus 2
-#python train.py --name 0314_noalpha_nostem --batch_size 64 --warmup 3 --gpus 3
+# python train.py --name 0528_t4_nomaxact --time_step 4 --batch_size 256 --warmup 5 --gpus 0,1 > ./train_log/train_0528_t4_nomaxact
+# python train.py --name 0521_a10b2t8_STE --time_step 8 --batch_size 256 --warmup 5 --gpus 2,3 > ./train_log/train_0521_a10b2t8_STE

@@ -1,24 +1,21 @@
 import os
 import sys
-import time
-import glob
 import numpy as np
 import torch
 import utils
-import logging
-import argparse
 import genotypes
 import torch.nn as nn
 import torch.utils
+import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 
 from tensorboardX import SummaryWriter
-from config import AugmentConfig
+from config import AugmentConfigImageNet
 from torch.autograd import Variable
 #from cnn_test import SimpleCNN as Network
-from model import NetworkCIFAR as Network
+from model import NetworkImageNet as Network
 
-args = AugmentConfig()
+args = AugmentConfigImageNet()
 
 device = torch.device("cuda")
 
@@ -28,7 +25,6 @@ writer.add_text('args', args.as_markdown(), 0)
 logger = utils.get_logger(os.path.join(args.path, "{}.log".format(args.name)))
 args.print_params(logger.info)
 init_energy = 1.0
-
 
 def main():
     logger.info("Logger is set - training start")
@@ -49,7 +45,6 @@ def main():
         args.dataset, args.data_path, cutout_length=0)
         
     genotype = eval("genotypes.%s" % args.arch)
-    #model = Network(train_data)
     model = Network(args.init_channels, n_classes, args.layers, genotype)
     if args.load == True:
         model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
@@ -86,9 +81,9 @@ def main():
         valid_data, batch_size=args.batch_size,
         shuffle=False, pin_memory=True, num_workers=args.workers)
     
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
-    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs, eta_min=args.learning_rate_min_alpha)
-    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
+    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs)
+    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs)
     best_acc = 0.0
     global init_energy
     for epoch in range(args.epochs):

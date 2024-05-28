@@ -83,23 +83,26 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=32,
                                          shuffle=False, num_workers=2)
 
 # Checking if GPU is available and setting device accordingly
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(2)
 print("Device:", device)
 
 # Instantiate the model and move it to the GPU
 net = CIFAR10_CNN().to(device)
-base_params, model_params = utils.split_params(net)
+alpha_params, base_params, model_params = utils.split_params(net)
 # Define loss function and optimizer
 criterion = nn.CrossEntropyLoss()
 #optimizer = optim.SGD(model.parameters(), lr=0.025, momentum=0.9)
 optimizer = optim.SGD(model_params, lr=0.025, momentum=0.9)
+optimizer_alpha = optim.SGD(alpha_params, lr=1)
 optimizer_base = optim.SGD(base_params, lr=1)
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 1000, eta_min=0.001)
+scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, 1000, eta_min=0.001)
 scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, 1000, eta_min=0.001)
 # Training loop
 utils.param_mode_switch(net)
-for epoch in range(1000):  # loop over the dataset multiple times
+for epoch in range(300):  # loop over the dataset multiple times
     running_loss = 0.0
     correct = 0
     total = 0
@@ -109,6 +112,7 @@ for epoch in range(1000):  # loop over the dataset multiple times
         inputs, labels = data[0].to(device), data[1].to(device)
 
         optimizer.zero_grad()
+        optimizer_alpha.zero_grad()
         optimizer_base.zero_grad()
 
         # forward + backward + optimize
@@ -116,6 +120,7 @@ for epoch in range(1000):  # loop over the dataset multiple times
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer_base.step()
+        optimizer_alpha.step()
         optimizer.step()
 
         running_loss += loss.item()
@@ -126,13 +131,16 @@ for epoch in range(1000):  # loop over the dataset multiple times
             print('[%d, %5d] loss: %.3f' %
                   (epoch + 1, i + 1, running_loss / 200))
             running_loss = 0.0
-            alpha, _ = utils.print_minimum_alpha(net, 1e6)
-            print('alpha', alpha)
+            min_alpha, _ = utils.print_minimum_alpha(net, 1e6)
+            print('min_alpha', min_alpha)
             alpha, _ = utils.print_alpha(net, [])
+            alpha_grad, _ = utils.print_alpha_grad(net, [])
             base, _ = utils.print_base(net, [])
             base_grad, _ = utils.print_base_grad(net, [])
+            print('-----------------alpha-----------------')
             for i in range(len(base)):
-                print(alpha[i][0], alpha[i][1])
+                print(alpha[i][0], alpha[i][1], alpha_grad[i][1])
+            print('-----------------base-----------------')
             for i in range(len(base)):
                 print(base[i][0], base[i][1], base_grad[i][1])
         
