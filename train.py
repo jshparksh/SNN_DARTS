@@ -51,8 +51,14 @@ def main():
     genotype = eval("genotypes.%s" % args.arch)
     #model = Network(train_data)
     model = Network(args.init_channels, n_classes, args.layers, genotype)
+    
+    load_epoch = 0
     if args.load == True:
-        model = utils.load_checkpoint(model, args.load_dir, epoch=args.load_epoch)
+        logger.info('load checkpoint from %s', args.load_dir)
+        checkpoint = utils.load_checkpoint(args.load_dir, epoch=args.load_epoch)
+        model.load_state_dict(checkpoint['model'].module.state_dict(), strict=False)
+        load_epoch = int(args.load_epoch)
+        
     model = model.cuda()
     model = torch.nn.DataParallel(model, device_ids=args.gpus)
     logger.info("param size = %fMB", utils.count_parameters_in_MB(model))
@@ -78,6 +84,11 @@ def main():
         args.learning_rate_base
         )
     
+    if args.load == True:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        optimizer_alpha.load_state_dict(checkpoint['alpha_optimizer'])
+        optimizer_base.load_state_dict(checkpoint['base_optimizer'])
+        
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, 
         shuffle=True, pin_memory=True, num_workers=args.workers)
@@ -91,7 +102,7 @@ def main():
     scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
     best_acc = 0.0
     global init_energy
-    for epoch in range(args.epochs):
+    for epoch in range(load_epoch, args.epochs):
         if epoch == args.warmup:
             model = utils.param_mode_switch(model)
             

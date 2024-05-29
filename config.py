@@ -202,7 +202,7 @@ class AugmentConfigImageNet(BaseConfig):
         parser.add_argument('--arch', type=str, default='SNNDARTS', help='Cell genotype')
         parser.add_argument('--load', type=bool, default=False, help='load pretrained model')
         parser.add_argument('--save_dir', type=str, default='./searchs/', help='path to save results')
-        parser.add_argument('--load_dir', type=str, default='./augments/0226_nolog/', help='path to load results')
+        parser.add_argument('--load_dir', type=str, default='./augments_imagenet/0529_test/', help='path to load results')
         parser.add_argument('--load_epoch', type=str, default='0', help='load pretrained model from specific epoch')
         parser.add_argument('--batch_size', type=int, default=512, help='batch size')
         parser.add_argument('--learning_rate', type=float, default=0.1, help='lr for weights')

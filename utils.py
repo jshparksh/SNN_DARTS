@@ -117,15 +117,16 @@ def save_checkpoint(state, ckpt_dir, is_best=False):
         best_filename = os.path.join(ckpt_dir, 'best.pth.tar')
         shutil.copyfile(filename, best_filename)
 
-def load_checkpoint(model, load_dir, epoch=None, is_best=False):
+def load_checkpoint(load_dir, epoch=None, is_best=False):
     if is_best:
         ckpt = os.path.join(load_dir, "best.pth.tar")
     elif epoch is not None:
         ckpt = os.path.join(load_dir, epoch, "checkpoint.pth.tar".format(epoch))
     else:
         ckpt = os.path.join(load_dir, "checkpoint.pth.tar")
-    model.load_state_dict(torch.load(ckpt).module.state_dict(), strict=False) #.module.state_dict()
-    return model
+    checkpoint = torch.load(ckpt)
+    return checkpoint
+
 
 def count_parameters_in_MB(model):
     return np.sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary" not in name)/1e6
