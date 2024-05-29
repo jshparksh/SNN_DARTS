@@ -156,7 +156,7 @@ class NetworkCIFAR(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
             nn.BatchNorm2d(C_curr),
-            PACT() #PACT_with_log_quantize(time_step=args.time_step)
+            PACT(alpha=args.init_pact_alpha) #PACT_with_log_quantize(time_step=args.time_step)
         )
         
         C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
@@ -198,15 +198,15 @@ class NetworkImageNet(nn.Module):
             self.stem0 = nn.Sequential(
                 nn.Conv2d(3, C // 2, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(C // 2),
-                PACT(),
+                PACT(alpha=args.init_pact_alpha),
                 nn.Conv2d(C // 2, C, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(C),
-                PACT()
+                PACT(alpha=args.init_pact_alpha)
             )
             self.stem1 = nn.Sequential(
                 nn.Conv2d(C, C, 3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(C),
-                PACT()
+                PACT(alpha=args.init_pact_alpha)
             )
             
             C_prev_prev, C_prev, C_curr = C, C, C

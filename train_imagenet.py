@@ -26,6 +26,21 @@ logger = utils.get_logger(os.path.join(args.path, "{}.log".format(args.name)))
 args.print_params(logger.info)
 init_energy = 1.0
 
+class CrossEntropyLabelSmooth(nn.Module):
+
+    def __init__(self, num_classes, epsilon):
+        super(CrossEntropyLabelSmooth, self).__init__()
+        self.num_classes = num_classes
+        self.epsilon = epsilon
+        self.logsoftmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, inputs, targets):
+        log_probs = self.logsoftmax(inputs)
+        targets = torch.zeros_like(log_probs).scatter_(1, targets.unsqueeze(1), 1)
+        targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
+        loss = (-targets * log_probs).mean(0).sum()
+        return loss
+    
 def main():
     logger.info("Logger is set - training start")
     
@@ -53,6 +68,8 @@ def main():
     logger.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
     criterion = nn.CrossEntropyLoss().cuda()
+    criterion_smooth = CrossEntropyLabelSmooth(n_classes, args.label_smooth)
+    criterion_smooth = criterion_smooth.cuda()
     
     # split model parameters into two groups
     alpha_params, base_params, model_params = utils.split_params(model)
@@ -102,7 +119,7 @@ def main():
         current_base_lr = scheduler_base.get_lr()[0]
         logger.info('Epoch: %d lr: %e alphalr: %e baselr: %e', epoch, current_lr, current_alpha_lr, current_base_lr)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
-        train_acc, train_obj = train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch)
+        train_acc, train_obj = train(train_queue, model, model_params, criterion_smooth, optimizer, optimizer_alpha, optimizer_base, epoch)
         logger.info('train_acc {:.4%}'.format(train_acc))
 
         valid_acc, valid_obj = infer(valid_queue, model, criterion, epoch)
@@ -113,9 +130,9 @@ def main():
         min_base, max_base, _ = utils.print_min_max_base(model, 1e6, 0)
         logger.info('min_alpha %f', min_alpha)
         logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
-        # if not os.path.exists(os.path.join(args.path, str(epoch))):
-        #     os.mkdir(os.path.join(args.path, str(epoch)))
-        # utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
+        if not os.path.exists(os.path.join(args.path, str(epoch))):
+            os.mkdir(os.path.join(args.path, str(epoch)))
+        utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
 def train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch):
     losses = utils.AverageMeter()

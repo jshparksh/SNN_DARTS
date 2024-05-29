@@ -118,9 +118,9 @@ def main():
         min_base, max_base, _ = utils.print_min_max_base(model, 1e6, 0)
         logger.info('min_alpha %f', min_alpha)
         logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
-        # if not os.path.exists(os.path.join(args.path, str(epoch))):
-        #     os.mkdir(os.path.join(args.path, str(epoch)))
-        # utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
+        if not os.path.exists(os.path.join(args.path, str(epoch))):
+            os.mkdir(os.path.join(args.path, str(epoch)))
+        utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
 def train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch):
     losses = utils.AverageMeter()

@@ -22,7 +22,7 @@ class ReLUConvBN(nn.Module):
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_out, kernel_size, stride=stride, padding=padding, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.C_in = C_in
         self.C_out = C_out
@@ -47,7 +47,7 @@ class AvgPool(nn.Module):
         super(AvgPool, self).__init__()
         self.op = nn.Sequential(
             nn.AvgPool2d(kernel_size, stride=stride, padding=padding, count_include_pad=False),
-            #PACT_with_log_quantize(time_step=args.time_step)
+            #PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.flops = [0]
         self.num_ifm = [1]
@@ -66,7 +66,7 @@ class MaxPool(nn.Module):
         super(MaxPool, self).__init__()
         self.op = nn.Sequential(
             nn.MaxPool2d(kernel_size, stride=stride, padding=padding),
-            #PACT_with_log_quantize(time_step=args.time_step)
+            #PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.flops = [0]
         self.num_ifm = [1]
@@ -88,7 +88,7 @@ class Conv(nn.Module):
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_out, kernel_size=kernel_size, stride=stride, padding=padding, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
             )
         self.C_in = C_in
         self.C_out = C_out
@@ -118,10 +118,10 @@ class DilConv(nn.Module):
         super(DilConv, self).__init__()    
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_in, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, groups=C_in, bias=False),
-            PACT_with_log_quantize(time_step=args.time_step),
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step),
             nn.Conv2d(C_in, C_out, kernel_size=1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
             )
         self.C_in = C_in
         self.C_out = C_out
@@ -152,15 +152,15 @@ class SepConv(nn.Module):
         super(SepConv, self).__init__()
         self.op = nn.Sequential(
             nn.Conv2d(C_in, C_in, kernel_size=kernel_size, stride=stride, padding=padding, groups=C_in, bias=False),
-            PACT_with_log_quantize(time_step=args.time_step),
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step),
             nn.Conv2d(C_in, C_in, kernel_size=1, padding=0, bias=False),
             nn.BatchNorm2d(C_in, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step),
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step),
             nn.Conv2d(C_in, C_in, kernel_size=kernel_size, stride=1, padding=padding, groups=C_in, bias=False),
-            PACT_with_log_quantize(time_step=args.time_step),
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step),
             nn.Conv2d(C_in, C_out, kernel_size=1, padding=0, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.C_in = C_in
         self.C_out = C_out
@@ -192,7 +192,7 @@ class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
         self.op = nn.Sequential(
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.op_type = 'skip'
         
@@ -232,12 +232,12 @@ class FactorizedReduce(nn.Module):
         self.conv_1 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
             nn.BatchNorm2d(C_out // 2, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.conv_2 = nn.Sequential(
             nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
             nn.BatchNorm2d(C_out // 2, affine=affine),
-            PACT_with_log_quantize(time_step=args.time_step)
+            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
         )
         self.C_in = C_in
         self.C_out = C_out
