@@ -20,6 +20,7 @@ class ReLUConvBN(nn.Module):
     def __init__(self, C_in, C_out, kernel_size, stride, padding, affine=True):
         super(ReLUConvBN, self).__init__()
         self.op = nn.Sequential(
+            nn.ReLU(inplace=False),
             nn.Conv2d(C_in, C_out, kernel_size, stride=stride, padding=padding, bias=False),
             nn.BatchNorm2d(C_out, affine=affine),
             PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
@@ -37,7 +38,7 @@ class ReLUConvBN(nn.Module):
         return self.op(x)
 
     def spike_datas(self):
-        self.quan_infos = [[self.op[2].normed_ofm, self.op[2].base]]
+        self.quan_infos = [[self.op[3].normed_ofm, self.op[3].base]]
         self.spike_rate = [non_zero_ifm / num_ifm for non_zero_ifm, num_ifm in zip(self.non_zero_ifm, self.num_ifm)]
         self.time_neuron = [torch.round(torch.where(quan_info[0] == 0, torch.tensor(0, dtype=torch.float32).cuda(), -torch.log(quan_info[0]))/torch.log(quan_info[1])) for quan_info in self.quan_infos]
         return [self.flops, self.spike_rate, self.time_neuron]
@@ -229,16 +230,21 @@ class FactorizedReduce(nn.Module):
         super(FactorizedReduce, self).__init__()
         assert C_out % 2 == 0
         self.relu = nn.ReLU(inplace=False)
-        self.conv_1 = nn.Sequential(
-            nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
-            nn.BatchNorm2d(C_out // 2, affine=affine),
-            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
-        )
-        self.conv_2 = nn.Sequential(
-            nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
-            nn.BatchNorm2d(C_out // 2, affine=affine),
-            PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
-        )
+        self.conv1 = nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False)
+        self.conv2 = nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False)
+        self.bn = nn.BatchNorm2d(C_out, affine=affine)
+        self.pact_with_log_quan = PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
+
+        # self.conv_1 = nn.Sequential(
+        #     nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
+        #     nn.BatchNorm2d(C_out // 2, affine=affine),
+        #     PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
+        # )
+        # self.conv_2 = nn.Sequential(
+        #     nn.Conv2d(C_in, C_out // 2, 1, stride=2, padding=0, bias=False),
+        #     nn.BatchNorm2d(C_out // 2, affine=affine),
+        #     PACT_with_log_quantize(alpha=args.init_log_alpha, base=args.init_base, time_step=args.time_step)
+        # )
         self.C_in = C_in
         self.C_out = C_out
         self.flops = [0]
@@ -248,13 +254,15 @@ class FactorizedReduce(nn.Module):
         
     def forward(self, x):
         x = self.relu(x)
-        out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:])], dim=1)
+        out = torch.cat([self.conv1(x), self.conv2(x[:,:,1:,1:])], dim=1)
+        out = self.bn(out)
+        out = self.pact_with_log_quan(out)
         self.flops = [args.batch_size / 4 * 1 * 1 * self.C_in * self.C_out // 2 * x.size()[2] * x.size()[3] / 2 ** 2,
                     args.batch_size / 4 * 1 * 1 * self.C_in * self.C_out // 2 * x.size()[2] * x.size()[3] / 2 ** 2]
-        self.num_ifm = [torch.numel(x), torch.numel(x)]
-        self.non_zero_ifm = [torch.count_nonzero(x), torch.count_nonzero(x)]
-        self.ofms = [self.conv_1[2].normed_ofm, self.conv_2[2].normed_ofm]
-        self.quan_infos = [[self.conv_1[2].normed_ofm, self.conv_1[2].base], [self.conv_2[2].normed_ofm, self.conv_2[2].base]]
+        self.num_ifm = [torch.numel(x)]
+        self.non_zero_ifm = [torch.count_nonzero(x)]
+        self.ofms = [self.pact_with_log_quan.normed_ofm]
+        self.quan_infos = [[self.pact_with_log_quan.normed_ofm, self.pact_with_log_quan.base]]
         return out
 
     def spike_datas(self):
