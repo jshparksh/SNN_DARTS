@@ -86,9 +86,9 @@ def main():
         valid_data, batch_size=args.batch_size,
         shuffle=True, pin_memory=True, num_workers=args.workers)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.learning_rate_min)
-    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs, eta_min=args.learning_rate_min_alpha)
-    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs, eta_min=args.learning_rate_min_base)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
+    scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs)
+    scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs)
     
     architect = Architect(model, criterion, args)
     

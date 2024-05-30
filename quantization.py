@@ -51,9 +51,9 @@ class PACT_log_quantize(torch.autograd.Function):
         c_x = torch.clamp(x, min=0., max=alpha.item()*base.item()**(-1))
         normed_ofm = (c_x / (alpha*base**(-1)))
         log_value = torch.where(normed_ofm==0.0, torch.tensor(-time_step).float().cuda(), torch.log(normed_ofm)/torch.log(torch.tensor(base)))
-        round = torch.round(log_value)
+        round = torch.round(log_value) #round value can be lower than time_step in underflow region
         floor = torch.floor(log_value)
-        q_y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha*base**(-1)
+        q_y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha*base**(-1) # force to zero in underflow region
         err_curr = torch.sum(torch.abs((c_x-q_y))).view(-1)
         ctx.save_for_backward(x, log_value, alpha, base, floor, err_past, err_curr)
         ctx.constant = time_step
@@ -62,14 +62,13 @@ class PACT_log_quantize(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm, grad_err_curr):
-        x, log_value, alpha, base, floor, err_past, err_curr = ctx.saved_variables #round value can be lower than time_step in underflow region
+        x, log_value, alpha, base, floor, err_past, err_curr = ctx.saved_variables 
         
         min_act = alpha * base**(-1) * (base**((-ctx.constant+1-ctx.constant)/2))
         
-        lt0      = x < 0
         ltm      = x < min_act
         gta      = x > alpha*base**(-1)
-        gi       = (~(lt0|gta)).float()
+        gi       = (~(ltm|gta)).float()
         
         grad_x = grad_output*gi
         grad_alpha = torch.sum(torch.where(x<min_act, torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha*base**(-1))*(alpha*(base**(floor)-base**(floor-1))/(x*(base**(-floor)-base**(-floor+1))))+grad_output*x.ge(alpha*base**(-1))*base**(-1))).view(-1)
