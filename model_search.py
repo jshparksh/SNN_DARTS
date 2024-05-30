@@ -95,7 +95,63 @@ class Cell(nn.Module):
             states.append(s)
         
         return torch.cat(states[-self._multiplier:], dim=1)
-
+    
+    def set_alpha_base(self):
+        alpha_tmp = 0
+        base_tmp = 0
+        alpha_cnt = 0
+        base_cnt = 0
+        for mixed_op in self._ops:
+            for op in mixed_op._ops:
+                if op.op_type == 'zero':
+                    pass
+                elif op.op_type == 'fr':
+                    alpha_tmp += op.pact_with_log_quan.alpha.data
+                    alpha_cnt += 1
+                    base_tmp += op.pact_with_log_quan.base.data
+                    base_cnt += 1
+                else:
+                    for seq in op.op:
+                        if hasattr(seq, 'alpha'):
+                            alpha_tmp += seq.alpha.data
+                            alpha_cnt += 1
+                        if hasattr(seq, 'tmp_base'):
+                            base_tmp += seq.base.data
+                            base_cnt += 1
+        with torch.no_grad():
+            self.mean_alpha = alpha_tmp / alpha_cnt
+            self.mean_base = base_tmp / base_cnt 
+            if self.preprocess0.op_type == 'fr':
+                self.preprocess0.pact_with_log_quan.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
+                self.preprocess0.pact_with_log_quan.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                        
+            elif self.preprocess0.op_type == 'rcb':
+                for seq in self.preprocess0.op:
+                    if hasattr(seq, 'alpha'):
+                        seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
+                    if hasattr(seq, 'tmp_base'):
+                        seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                    
+            for seq in self.preprocess1.op:
+                if hasattr(seq, 'alpha'):
+                    seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
+                if hasattr(seq, 'tmp_base'):
+                    seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+            
+            for mixed_op in self._ops:
+                for op in mixed_op._ops:
+                    if op.op_type == 'zero':
+                        pass
+                    elif op.op_type == 'fr':
+                        op.pact_with_log_quan.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
+                        op.pact_with_log_quan.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                    else:
+                        for seq in op.op:
+                            if hasattr(seq, 'alpha'):
+                                seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
+                            if hasattr(seq, 'tmp_base'):
+                                seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
+                                
     def cell_energy(self, weights):
         self.cell_e_add = 0
         self.cell_e_neuron = 0

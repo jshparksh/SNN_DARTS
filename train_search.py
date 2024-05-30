@@ -172,6 +172,11 @@ def train(train_queue, valid_queue, model, model_params, architect, optimizer, o
         optimizer.zero_grad()
         optimizer_alpha.zero_grad()
         optimizer_base.zero_grad()
+        
+        # fix base for each cell
+        for cell in model.module.cells:
+            cell.set_alpha_base()
+            
         # after begin epoch, update alpha
         if epoch >= args.spike_epoch:
             architect.step(input_search, target_search, spike_bool=True)
