@@ -60,6 +60,9 @@ def main():
         args.dataset, args.data_path, cutout_length=0)
         
     genotype = eval("genotypes.%s" % args.arch)
+    print('---------Genotype---------')
+    logger.info(genotype)
+    print('--------------------------') 
     model = Network(args.init_channels, n_classes, args.layers, genotype)
     
     load_epoch = 0
@@ -220,8 +223,7 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
             
             if step != 0 and step % update_step == 0:
                 utils.update_base(model, update_step)
-        if step == 2:
-            break
+
     return top1.avg, losses.avg
 
 
@@ -246,8 +248,7 @@ def infer(valid_queue, model, criterion, epoch):
 
         if step % args.print_freq == 0:
             logger.info("Valid: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Final Prec@1 {top1.avg:.4%}".format(epoch+1, args.epochs, step, len(valid_queue) - 1, losses=losses, top1=top1))
-        if step == 2:
-            break  
+        
     return top1.avg, losses.avg
 
 

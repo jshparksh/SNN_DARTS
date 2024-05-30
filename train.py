@@ -49,7 +49,9 @@ def main():
         args.dataset, args.data_path, cutout_length=0)
         
     genotype = eval("genotypes.%s" % args.arch)
-    #model = Network(train_data)
+    print('---------Genotype---------')
+    logger.info(genotype)
+    print('--------------------------') 
     model = Network(args.init_channels, n_classes, args.layers, genotype)
     
     load_epoch = 0
