@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from operations import *
-from config import AugmentConfig
+from operations_imagenet import *
+from config import AugmentConfigImageNet
 
-args = AugmentConfig()
+args = AugmentConfigImageNet()
 
 class Cell(nn.Module):
     
@@ -117,47 +117,55 @@ class Cell(nn.Module):
             self.cell_e_add += 0.03 * op_flops_spike_rate
             self.cell_e_neuron += 0.26 * op_time_neuron
         return self.cell_e_add, self.cell_e_neuron
-       
-class NetworkCIFAR(nn.Module):
-    
-    def __init__(self, C, num_classes, layers, genotype):
-        super(NetworkCIFAR, self).__init__()
-        self._layers = layers
+
+class NetworkImageNet(nn.Module):
         
-        stem_multiplier = 3
-        C_curr = stem_multiplier*C
-        self.stem = nn.Sequential(
-            nn.Conv2d(3, C_curr, 3, padding=1, bias=False),
-            nn.BatchNorm2d(C_curr),
-            PACT(alpha=args.init_pact_alpha) #PACT_with_log_quantize(time_step=args.time_step)
-        )
-        
-        C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
-        self.cells = nn.ModuleList()
-        reduction_prev = False
-        for i in range(layers):
-            if i in [layers//3, 2*layers//3]:
-                C_curr *= 2
-                reduction = True
-            else:
-                reduction = False
-            cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
-            reduction_prev = reduction
-            self.cells += [cell]
-            C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
-        self.global_pooling = nn.AdaptiveAvgPool2d(1)
-        self.classifier = nn.Linear(C_prev, num_classes)
-        
-    def forward(self, input):
-        E_add = 0
-        E_neuron = 0
-        s0 = s1 = self.stem(input)
-        for cell in self.cells:
-            s0, s1 = s1, cell(s0, s1)
-            cell_e_add, cell_e_neuron = cell.cell_energy()
-            E_add += cell_e_add
-            E_neuron += cell_e_neuron
-        self._total_spike_energy = E_add + E_neuron
-        out = self.global_pooling(s1)
-        logits = self.classifier(out.view(out.size(0),-1))
-        return logits, self._total_spike_energy
+        def __init__(self, C, num_classes, layers, genotype):
+            super(NetworkImageNet, self).__init__()
+            self._layers = layers
+            
+            self.stem0 = nn.Sequential(
+                nn.Conv2d(3, C // 2, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(C // 2),
+                PACT(alpha=args.init_pact_alpha),
+                nn.Conv2d(C // 2, C, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(C),
+                PACT(alpha=args.init_pact_alpha)
+            )
+            self.stem1 = nn.Sequential(
+                nn.Conv2d(C, C, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(C),
+                PACT(alpha=args.init_pact_alpha)
+            )
+            
+            C_prev_prev, C_prev, C_curr = C, C, C
+            self.cells = nn.ModuleList()
+            reduction_prev = True
+            for i in range(layers):
+                if i in [layers//3, 2*layers//3]:
+                    C_curr *= 2
+                    reduction = True
+                else:
+                    reduction = False
+                cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+                reduction_prev = reduction
+                self.cells += [cell]
+                C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
+                
+            self.global_pooling = nn.AvgPool2d(7)
+            self.classifier = nn.Linear(C_prev, num_classes)
+            
+        def forward(self, input):
+            E_add = 0
+            E_neuron = 0
+            s0 = self.stem0(input)
+            s1 = self.stem1(s0)
+            for cell in self.cells:
+                s0, s1 = s1, cell(s0, s1)
+                cell_e_add, cell_e_neuron = cell.cell_energy()
+                E_add += cell_e_add
+                E_neuron += cell_e_neuron
+            self._total_spike_energy = E_add + E_neuron
+            out = self.global_pooling(s1)
+            logits = self.classifier(out.view(out.size(0),-1))
+            return logits, self._total_spike_energy

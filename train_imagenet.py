@@ -13,7 +13,7 @@ from tensorboardX import SummaryWriter
 from config import AugmentConfigImageNet
 from torch.autograd import Variable
 #from cnn_test import SimpleCNN as Network
-from model import NetworkImageNet as Network
+from model_imagenet import NetworkImageNet as Network
 
 args = AugmentConfigImageNet()
 
@@ -60,9 +60,7 @@ def main():
         args.dataset, args.data_path, cutout_length=0)
         
     genotype = eval("genotypes.%s" % args.arch)
-    print('---------Genotype---------')
     logger.info(genotype)
-    print('--------------------------') 
     model = Network(args.init_channels, n_classes, args.layers, genotype)
     
     load_epoch = 0
