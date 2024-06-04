@@ -96,12 +96,10 @@ def main():
         base_params,
         args.learning_rate_base
         )
-    
     if args.load == True:
         optimizer.load_state_dict(checkpoint['optimizer'])
         optimizer_alpha.load_state_dict(checkpoint['alpha_optimizer'])
         optimizer_base.load_state_dict(checkpoint['base_optimizer'])
-        
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, 
         shuffle=True, pin_memory=True, num_workers=args.workers)
@@ -113,6 +111,11 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
     scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, args.epochs)
     scheduler_base = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_base, args.epochs)
+    if args.load == True:
+        scheduler.load_state_dict(checkpoint['scheduler'])
+        scheduler_alpha.load_state_dict(checkpoint['scheduler_alpha'])
+        scheduler_base.load_state_dict(checkpoint['scheduler_base'])
+        
     best_acc = 0.0
     global init_energy
     for epoch in range(load_epoch, args.epochs):
@@ -149,6 +152,9 @@ def main():
             'optimizer' : optimizer.state_dict(),
             'alpha_optimizer' : optimizer_alpha.state_dict(),
             'base_optimizer' : optimizer_base.state_dict(),
+            'scheduler' : scheduler.state_dict(),
+            'scheduler_alpha' : scheduler_alpha.state_dict(),
+            'scheduler_base' : scheduler_base.state_dict(),
             }, os.path.join(args.path, str(epoch)))
  
 def train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch):
@@ -221,7 +227,6 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
             
             if step != 0 and step % update_step == 0:
                 utils.update_base(model, update_step)
-
     return top1.avg, losses.avg
 
 
@@ -246,7 +251,6 @@ def infer(valid_queue, model, criterion, epoch):
 
         if step % args.print_freq == 0:
             logger.info("Valid: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Final Prec@1 {top1.avg:.4%}".format(epoch+1, args.epochs, step, len(valid_queue) - 1, losses=losses, top1=top1))
-        
     return top1.avg, losses.avg
 
 
