@@ -65,14 +65,16 @@ class PACT_log_quantize(torch.autograd.Function):
         x, log_value, alpha, base, floor, err_past, err_curr = ctx.saved_variables 
         
         min_act = alpha * base**(-1) * (base**((-ctx.constant+1-ctx.constant)/2))
-        
-        lt0      = x < 0
+        max_act = alpha * base**(-1) * (base**((0-1)/2))
+        ltm      = x < min_act
         gta      = x > alpha*base**(-1)
-        gi       = (~(lt0|gta)).float()
+        gtm      = x > max_act
+        gi       = (~(ltm|gtm)).float()
         
         grad_x = grad_output*gi
-        grad_alpha = torch.sum(torch.where(x<min_act, torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha*base**(-1))*(alpha*(base**(floor)-base**(floor-1))/(x*(base**(-floor)-base**(-floor+1))))+grad_output*x.ge(alpha*base**(-1))*base**(-1))).view(-1)
-        grad_tmp_base = (torch.sum(torch.where((x<min_act) | (x>=alpha*base**(-1)), torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha*base**(-1))*(alpha*(base**(floor)-base**(floor-1))/((x/alpha)**(1/floor)-(x/alpha)**(1/(floor-1))))))-torch.sum(grad_output*x.ge(alpha*base**(-1))*alpha/(base**2))).view(-1)
+        grad_alpha = torch.sum(torch.where(x<min_act, torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(max_act)*(alpha*(base**(floor)-base**(floor-1))/(x*(base**(-floor)-base**(-floor+1))))+grad_output*x.ge(max_act)*base**(-1))).view(-1)
+        grad_tmp_base = torch.sum(torch.where((x<min_act) | (x>=max_act), torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(max_act)*(alpha*(base**(floor)-base**(floor-1))/((x/alpha)**(1/floor)-(x/alpha)**(1/(floor-1)))))-grad_output*x.ge(max_act)*alpha/(base**2)).view(-1)
+        # (torch.sum(torch.where((x<min_act) | (x>=alpha*base**(-1)), torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha*base**(-1))*(alpha*(base**(floor)-base**(floor-1))/((x/alpha)**(1/floor)-(x/alpha)**(1/(floor-1))))))-torch.sum(grad_output*x.ge(alpha*base**(-1))*alpha/(base**2))).view(-1)
         
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
     
