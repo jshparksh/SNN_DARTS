@@ -63,15 +63,27 @@ class PACT_log_quantize(torch.autograd.Function):
     def backward(ctx, grad_output, grad_normed_ofm, grad_err_curr):
         x, alpha, base = ctx.saved_variables 
         
-        min_act = alpha * (base**((-ctx.constant+1-ctx.constant)/2))
+        lmina = alpha * (base**((-ctx.constant+1-ctx.constant)/2)) # left bound of activation which has minimum round value
+        rmina = alpha * (base**((-ctx.constant+1-ctx.constant+2)/2)) # right bound of activation which has minimum round value
+        maxa = alpha * base**((0-1)/2) # right bound of activation which has maximum round value
         
-        lt0      = x < 0
-        gta      = x > alpha*base**(-1)
-        gi       = (~(lt0|gta)).float()
+        grad_x = grad_output * (
+            x.ge(lmina) * x.lt(rmina) * base**(1/2) / (base - 1)
+            + x.ge(rmina) * x.lt(maxa) * base**(-1/2)
+            + x.ge(rmina) * x.lt(alpha) * (1 + base**(-1/2))
+        )
         
-        grad_x = grad_output*gi
-        grad_alpha = torch.sum(torch.where(x<min_act, torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha)*(alpha*(base**(floor+1)-base**(floor))/(x*(base**(-floor-1)-base**(-floor))))+grad_output*x.ge(alpha))).view(-1)
-        grad_tmp_base = torch.sum(torch.where((x<min_act) | (x>=alpha*base**(-1)), torch.tensor(0.,).cuda(), grad_output*x.ge(min_act)*x.lt(alpha*base**(-1))*(alpha*(base**(floor+1)-base**(floor))/((x/alpha)**(1/(floor+1))-(x/alpha)**(1/floor))))).view(-1)
+        grad_alpha = torch.sum(
+            torch.where((x>=lmina) & (x<rmina), grad_output*((base**(-ctx.constant))/(1-base**(-1))), torch.tensor(0.,).cuda())
+            + torch.where((x>=maxa) & (x<alpha), -grad_output*base**(-1/2), torch.tensor(0.,).cuda())
+            + torch.where(x>=alpha, grad_output, torch.tensor(0.,).cuda())
+        ).view(-1)
+        
+        grad_tmp_base = torch.sum(
+            torch.where((x>=lmina) & (x<rmina), grad_output*(alpha*ctx.constant*base**(-ctx.constant)/(base-1)+alpha*base**(-ctx.constant)/((base-1)**2)-x*(base**(-3/2)+base**(-1/2))/(2*((base**(1/2)-base**(-1/2))**2))), torch.tensor(0.,).cuda())
+            + torch.where((x>=rmina) & (x<maxa), grad_output*(-x/(2*(base**(3/2)))), torch.tensor(0.,).cuda())
+            + torch.where((x>=maxa) & (x<alpha), grad_output*((alpha-x)/(2*(base**(3/2)))), torch.tensor(0.,).cuda())
+        ).view(-1)
         
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
     
