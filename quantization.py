@@ -70,11 +70,11 @@ class PACT_log_quantize(torch.autograd.Function):
         grad_x = grad_output * (
             x.ge(lmina) * x.lt(rmina) * base**(1/2) / (base - 1)
             + x.ge(rmina) * x.lt(maxa) * base**(-1/2)
-            + x.ge(rmina) * x.lt(alpha) * (1 + base**(-1/2))
+            + x.ge(maxa) * x.lt(alpha) * (1 + base**(-1/2))
         )
         
         grad_alpha = torch.sum(
-            torch.where((x>=lmina) & (x<rmina), grad_output*((base**(-ctx.constant))/(1-base**(-1))), torch.tensor(0.,).cuda())
+            torch.where((x>=lmina) & (x<rmina), -grad_output*((base**(-ctx.constant))/(1-base**(-1))), torch.tensor(0.,).cuda())
             + torch.where((x>=maxa) & (x<alpha), -grad_output*base**(-1/2), torch.tensor(0.,).cuda())
             + torch.where(x>=alpha, grad_output, torch.tensor(0.,).cuda())
         ).view(-1)
@@ -91,7 +91,7 @@ class PACT_log_quantize(torch.autograd.Function):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=10., base=2.0, time_step=6):
+    def __init__(self, alpha=5., base=2.0, time_step=6):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
