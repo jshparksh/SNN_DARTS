@@ -62,28 +62,14 @@ class PACT_log_quantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm, grad_err_curr):
         x, alpha, base = ctx.saved_variables 
+        maxa = alpha * base**((0-1)/2)
+        lt0      = x < 0
+        gtm      = x > maxa
+        gi       = (~(lt0|gtm)).float()
         
-        lmina = alpha * (base**((-ctx.constant+1-ctx.constant)/2)) # left bound of activation which has minimum round value
-        rmina = alpha * (base**((-ctx.constant+1-ctx.constant+2)/2)) # right bound of activation which has minimum round value
-        maxa = alpha * base**((0-1)/2) # right bound of activation which has maximum round value
-        
-        grad_x = grad_output * (
-            x.ge(lmina) * x.lt(rmina) * base**(1/2) / (base - 1)
-            + x.ge(rmina) * x.lt(maxa) * base**(-1/2)
-            + x.ge(maxa) * x.lt(alpha) * (1 + base**(-1/2))
-        )
-        
-        grad_alpha = torch.sum(
-            torch.where((x>=lmina) & (x<rmina), -grad_output*((base**(-ctx.constant))/(1-base**(-1))), torch.tensor(0.,).cuda())
-            + torch.where((x>=maxa) & (x<alpha), -grad_output*base**(-1/2), torch.tensor(0.,).cuda())
-            + torch.where(x>=alpha, grad_output, torch.tensor(0.,).cuda())
-        ).view(-1)
-        
-        grad_tmp_base = torch.sum(
-            torch.where((x>=lmina) & (x<rmina), grad_output*(alpha*ctx.constant*base**(-ctx.constant)/(base-1)+alpha*base**(-ctx.constant)/((base-1)**2)-x*(base**(-3/2)+base**(-1/2))/(2*((base**(1/2)-base**(-1/2))**2))), torch.tensor(0.,).cuda())
-            + torch.where((x>=rmina) & (x<maxa), grad_output*(-x/(2*(base**(3/2)))), torch.tensor(0.,).cuda())
-            + torch.where((x>=maxa) & (x<alpha), grad_output*((alpha-x)/(2*(base**(3/2)))), torch.tensor(0.,).cuda())
-        ).view(-1)
+        grad_x = grad_output * gi * base ** (1/2)
+        grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        grad_tmp_base = torch.sum(grad_output*x.ge(0)*x.lt(maxa)*1/2*x*base**(-1/2)).view(-1)
         
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
     
@@ -91,7 +77,7 @@ class PACT_log_quantize(torch.autograd.Function):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2.0, time_step=6):
+    def __init__(self, alpha=5., base=2, time_step=6):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
