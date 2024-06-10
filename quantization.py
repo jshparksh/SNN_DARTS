@@ -68,7 +68,7 @@ class PACT_log_quantize(torch.autograd.Function):
         gi       = (~(lt0|gtm)).float()
         
         grad_x = grad_output * gi * base ** (1/2)
-        grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1)
+        grad_alpha = torch.sum(grad_output*x.ge(maxa).float()).view(-1)
         grad_tmp_base = torch.sum(grad_output*x.ge(0)*x.lt(maxa)*1/2*x*base**(-1/2)).view(-1)
         
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
