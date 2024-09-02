@@ -55,7 +55,7 @@ class CIFAR10_CNN(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(512, 512),
             nn.BatchNorm1d(512),
-            #PACT_with_log_quantize(),
+            PACT_with_log_quantize(),
             nn.Linear(512, 10)
         )
 
@@ -94,8 +94,8 @@ alpha_params, base_params, model_params = utils.split_params(net)
 criterion = nn.CrossEntropyLoss()
 #optimizer = optim.SGD(model.parameters(), lr=0.025, momentum=0.9)
 optimizer = optim.SGD(model_params, lr=0.025, momentum=0.9)
-optimizer_alpha = optim.SGD(alpha_params, lr=1)
-optimizer_base = optim.SGD(base_params, lr=1)
+optimizer_alpha = optim.SGD(alpha_params, lr=0.1)
+optimizer_base = optim.SGD(base_params, lr=10)
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 1000, eta_min=0.001)
 scheduler_alpha = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_alpha, 1000, eta_min=0.001)
@@ -107,8 +107,10 @@ for epoch in range(300):  # loop over the dataset multiple times
     correct = 0
     total = 0
     scheduler.step()
+    scheduler_alpha.step()
     scheduler_base.step()
     for i, data in enumerate(trainloader, 0):
+        print('epoch', epoch, 'batch', i)
         inputs, labels = data[0].to(device), data[1].to(device)
 
         optimizer.zero_grad()
@@ -122,7 +124,6 @@ for epoch in range(300):  # loop over the dataset multiple times
         optimizer_base.step()
         optimizer_alpha.step()
         optimizer.step()
-
         running_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
@@ -134,12 +135,12 @@ for epoch in range(300):  # loop over the dataset multiple times
             min_alpha, _ = utils.print_minimum_alpha(net, 1e6)
             print('min_alpha', min_alpha)
             alpha, _ = utils.print_alpha(net, [])
-            alpha_grad, _ = utils.print_alpha_grad(net, [])
+            # alpha_grad, _ = utils.print_alpha_grad(net, [])
             base, _ = utils.print_base(net, [])
             base_grad, _ = utils.print_base_grad(net, [])
             print('-----------------alpha-----------------')
             for i in range(len(base)):
-                print(alpha[i][0], alpha[i][1], alpha_grad[i][1])
+                print(alpha[i][0], alpha[i][1]) #, alpha_grad[i][1])
             print('-----------------base-----------------')
             for i in range(len(base)):
                 print(base[i][0], base[i][1], base_grad[i][1])

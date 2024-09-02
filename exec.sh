@@ -1,0 +1,1 @@
+docker exec -it js_SNN_DARTS /bin/bash

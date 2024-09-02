@@ -54,23 +54,33 @@ class PACT_log_quantize(torch.autograd.Function):
         round = torch.round(log_value)
         q_y = torch.where(round > -time_step, base**round, torch.tensor(0.,).cuda()) * alpha
         err_curr = torch.sum(torch.abs((c_x-q_y))).view(-1)
-        ctx.save_for_backward(x, alpha, base, round)
+        ctx.save_for_backward(x, q_y, alpha, base, round)
         ctx.constant = time_step
         return q_y, normed_ofm, err_curr
 
     
     @staticmethod
     def backward(ctx, grad_output, grad_normed_ofm, grad_err_curr):
-        x, alpha, base, round = ctx.saved_variables 
-        
-        mina = alpha * (base**((-ctx.constant+1-ctx.constant)/2))
-        ltm      = x < mina
+        x, q_y, alpha, base, round = ctx.saved_variables 
+        timestep = ctx.constant
+        mina = alpha * (base**((-timestep+1-timestep)/2))
+        lt0      = x < 0
         gta      = x > alpha
-        gi       = (~(ltm|gta)).float()
+        gi       = (~(lt0|gta)).float()
         
-        grad_x = grad_output * gi
-        grad_alpha = torch.sum(grad_output*x.ge(mina)*x.lt(alpha)*base**round+grad_output*x.ge(alpha)).view(-1)
-        grad_tmp_base = torch.sum(grad_output*x.ge(mina)*x.lt(alpha)*alpha*round*base**(round-1)).view(-1)
+        # grad_x = grad_output * gi
+        # grad_alpha = torch.sum(grad_output*x.ge(mina)*x.lt(alpha)*base**round+grad_output*x.ge(alpha)).view(-1)
+        # grad_tmp_base = torch.sum(grad_output*x.ge(mina)*x.lt(alpha)*alpha*round*base**(round-1)).view(-1)
+        
+        temper = 10 ##temperature of sigmoid
+        sigmoid_f = 1/(1+torch.exp(-temper*(x/alpha-base**(-timestep+1))))
+        grad_x = torch.where(x!=0, grad_output * gi, 0.0) ## LSQ
+        grad_x += grad_output*(lt0 & x.gt(0)) * sigmoid_f*(1-sigmoid_f)*temper* base**(-timestep+1)
+        grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1) ##LSQ
+        grad_alpha += torch.sum(grad_output*gi*(q_y-x)/alpha).view(-1) ##LSQ
+        grad_alpha += torch.sum(grad_output*(lt0 & x.gt(0))*base**(-timestep+1)*(-sigmoid_f*(1-sigmoid_f)*x*temper+sigmoid_f)).view(-1) ##LSQ
+        grad_tmp_base = torch.sum(grad_output*gi*q_y/base*round).view(-1) ##LSQ
+        grad_tmp_base += torch.sum(grad_output*(lt0 & x.gt(0))*alpha*(timestep-1)*base**(-timestep)*(base**(-timestep+1)*temper*sigmoid_f*(1-sigmoid_f)-sigmoid_f)).view(-1) ##LSQ
         
         return grad_x, grad_alpha, None, grad_tmp_base, None, None
     
@@ -78,7 +88,7 @@ class PACT_log_quantize(torch.autograd.Function):
 # edit here
 # combined function which trains alpha and base together
 class PACT_with_log_quantize(nn.Module):
-    def __init__(self, alpha=5., base=2, time_step=16):
+    def __init__(self, alpha=5., base=2, time_step=4):
         super(PACT_with_log_quantize, self).__init__()
         self.alpha = nn.Parameter(torch.Tensor([alpha]), requires_grad=False)
         self.base = nn.Parameter(torch.Tensor([base]), requires_grad=False)
