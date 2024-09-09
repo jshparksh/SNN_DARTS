@@ -73,7 +73,7 @@ class PACT_log_quantize(torch.autograd.Function):
         # grad_tmp_base = torch.sum(grad_output*x.ge(mina)*x.lt(alpha)*alpha*round*base**(round-1)).view(-1)
         
         temper = 10 ##temperature of sigmoid
-        sigmoid_f = 1/(1+torch.exp(-temper*(x/alpha-base**(-timestep+1))))
+        sigmoid_f = 1/(1+torch.exp(-temper*(x/alpha-base**(-timestep+1)))).clone().detach()
         grad_x = torch.where(x!=0, grad_output * gi, 0.0) ## LSQ
         grad_x += grad_output*(lt0 & x.gt(0)) * sigmoid_f*(1-sigmoid_f)*temper* base**(-timestep+1)
         grad_alpha = torch.sum(grad_output*x.ge(alpha).float()).view(-1) ##LSQ

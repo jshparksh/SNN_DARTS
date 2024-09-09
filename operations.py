@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import math
-from config import SearchConfig
+from config import AugmentConfig
 from quantization import PACT, PACT_with_log_quantize
 
-args = SearchConfig()
+args = AugmentConfig()
 
 # v = sqrt
 OPS = {

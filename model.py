@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from operations import *
+from operations_nolog import *
 from config import AugmentConfig
 
 args = AugmentConfig()
@@ -105,7 +106,7 @@ class Cell(nn.Module):
                             seq.alpha.data = torch.Tensor([(self.mean_alpha)]).cuda()
                         if hasattr(seq, 'tmp_base'):
                             seq.base.data = torch.Tensor([(self.mean_base)]).cuda()
-    
+        
     def cell_energy(self):
         self.cell_e_add = 0
         self.cell_e_neuron = 0
@@ -117,7 +118,68 @@ class Cell(nn.Module):
             self.cell_e_add += 0.03 * op_flops_spike_rate
             self.cell_e_neuron += 0.26 * op_time_neuron
         return self.cell_e_add, self.cell_e_neuron
-       
+
+class Cell_NOLOG(nn.Module):
+    
+    def __init__(self, genotype, C_prev_prev, C_prev, C, reduction, reduction_prev):
+        super(Cell_NOLOG, self).__init__()
+        print(C_prev_prev, C_prev, C)
+
+        if reduction_prev:
+            self.preprocess0 = FactorizedReduce_Nolog(C_prev_prev, C, affine=False)
+        else:
+            self.preprocess0 = ReLUConvBN_Nolog(C_prev_prev, C, 1, 1, 0)
+        self.preprocess1 = ReLUConvBN_Nolog(C_prev, C, 1, 1, 0)
+        
+        if reduction:
+            op_names, indices = zip(*genotype.reduce)
+            concat = genotype.reduce_concat
+        else:
+            op_names, indices = zip(*genotype.normal)
+            concat = genotype.normal_concat
+        self._compile(C, op_names, indices, concat, reduction)
+        
+    def _compile(self, C, op_names, indices, concat, reduction):
+        assert len(op_names) == len(indices)
+        self._steps = len(op_names) // 2
+        self._concat = concat
+        self.multiplier = len(concat)
+
+        self._ops = nn.ModuleList()
+        for name, index in zip(op_names, indices):
+            stride = 2 if reduction and index < 2 else 1
+            op = OPS_NOLOG[name](C, stride, True)
+            self._ops += [op]
+        self._indices = indices
+        
+    def forward(self, s0, s1):
+        s0 = self.preprocess0(s0)
+        s1 = self.preprocess1(s1)
+        states = [s0, s1]
+        for i in range(self._steps):
+            h1 = states[self._indices[2*i]]
+            h2 = states[self._indices[2*i+1]]
+            op1 = self._ops[2*i]
+            op2 = self._ops[2*i+1]
+            h1 = op1(h1)
+            h2 = op2(h2)
+            s = h1 + h2
+            states += [s]
+        return torch.cat([states[i] for i in self._concat], dim=1)
+    
+    def set_alpha_base(self):
+        alpha_tmp = 0
+        base_tmp = 0
+        alpha_cnt = 0
+        base_cnt = 0
+        pass
+    
+    def cell_energy(self):
+        self.cell_e_add = torch.tensor(0).cuda()
+        self.cell_e_neuron = torch.tensor(0).cuda()
+        
+        return self.cell_e_add, self.cell_e_neuron
+    
 class NetworkCIFAR(nn.Module):
     
     def __init__(self, C, num_classes, layers, genotype):
@@ -142,12 +204,14 @@ class NetworkCIFAR(nn.Module):
             else:
                 reduction = False
             cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+            if i == layers - 1:
+                cell = Cell_NOLOG(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
             reduction_prev = reduction
             self.cells += [cell]
             C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Linear(C_prev, num_classes)
-        
+    
     def forward(self, input):
         E_add = 0
         E_neuron = 0

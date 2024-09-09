@@ -156,7 +156,7 @@ def print_alpha_grad(model, alpha, op_name='stem'):
             if hasattr(module, "op_type"):
                 op_name = module.op_type
             alpha, model._modules[name] = print_alpha_grad(module, alpha, op_name=op_name)
-        if (hasattr(module, "alpha") and hasattr(module, "base") ) :
+        if (hasattr(module, "alpha")) :
             alpha.append([op_name, round(model._modules[name].alpha.grad.item(), 5)])
     return alpha, model
 
@@ -262,3 +262,4 @@ def split_params(model):
         else:
             other_params.append(param)
     return alpha_params, base_params, other_params
+    

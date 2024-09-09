@@ -99,7 +99,7 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--load_epoch', type=str, default='0', help='load pretrained model from specific epoch')
         parser.add_argument('--batch_size', type=int, default=512, help='batch size')
         parser.add_argument('--learning_rate', type=float, default=0.025, help='lr for weights')
-        parser.add_argument('--learning_rate_alpha', type=float, default=0.5, help='lr for alpha')
+        parser.add_argument('--learning_rate_alpha', type=float, default=0.1, help='lr for alpha')
         parser.add_argument('--learning_rate_base', type=float, default=0.1, help='lr for base')
         parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
         parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
@@ -109,9 +109,9 @@ class AugmentConfig(BaseConfig):
                                                                 '`all` indicates use all gpus.')
         parser.add_argument('--epochs', type=int, default=600, help='# of training epochs')
         parser.add_argument('--init_channels', type=int, default=32)
-        parser.add_argument('--init_pact_alpha', type=int, default=5)
-        parser.add_argument('--init_log_alpha', type=int, default=10)
-        parser.add_argument('--init_base', type=int, default=2)
+        parser.add_argument('--init_pact_alpha', type=float, default=5)
+        parser.add_argument('--init_log_alpha', type=float, default=5)
+        parser.add_argument('--init_base', type=float, default=2)
         parser.add_argument('--layers', type=int, default=16, help='# of layers')
         parser.add_argument('--seed', type=int, default=2, help='random seed')
         parser.add_argument('--workers', type=int, default=4, help='# of workers')
@@ -122,6 +122,7 @@ class AugmentConfig(BaseConfig):
         parser.add_argument('--drop_path_prob', type=float, default=0, help='drop path prob')
         parser.add_argument('--time_step', type=int, default=4, help='timestep for logarithmic spike')
         parser.add_argument('--warmup', type=int, default=5, help='alpha, base requires_grad switch into true')
+        parser.add_argument('--freeze', type=int, default=200, help='alpha, base requires_grad switch into false')
         parser.add_argument('--alpha_base_fix_epoch', type=int, default=100, help='alpha & base requires_grad switch into false')
 
         return parser
@@ -230,6 +231,6 @@ class AugmentConfigImageNet(BaseConfig):
         args = parser.parse_args()
         super().__init__(**vars(args))
 
-        self.data_path = '/dataset/imagenet'
+        self.data_path = '/data/imagenet'
         self.path = os.path.join('augments_imagenet', self.name)
         self.gpus = parse_gpus(self.gpus)        

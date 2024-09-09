@@ -47,7 +47,7 @@ def main():
     # get data with meta info
     n_classes, train_data, valid_data = utils.get_data(
         args.dataset, args.data_path, cutout_length=0)
-        
+    
     genotype = eval("genotypes.%s" % args.arch)
     print('---------Genotype---------')
     logger.info(genotype)
@@ -106,7 +106,10 @@ def main():
     global init_energy
     for epoch in range(load_epoch, args.epochs):
         if epoch == args.warmup:
-            model = utils.param_mode_switch(model)
+            model = utils.param_mode_switch(model, grad_bool=True)
+            
+        if epoch == args.freeze:
+            model = utils.param_mode_switch(model, grad_bool=False)
             
         # if epoch == args.alpha_base_fix_epoch:
         #     model = utils.base_mode_switch(model, grad_bool=False)
@@ -131,9 +134,9 @@ def main():
         min_base, max_base, _ = utils.print_min_max_base(model, 1e6, 0)
         logger.info('min_alpha %f', min_alpha)
         logger.info('min_base %.3f, max_base %.3f', min_base, max_base)
-        if not os.path.exists(os.path.join(args.path, str(epoch))):
-            os.mkdir(os.path.join(args.path, str(epoch)))
-        utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
+        # if not os.path.exists(os.path.join(args.path, str(epoch))):
+        #     os.mkdir(os.path.join(args.path, str(epoch)))
+        # utils.save_checkpoint(model, os.path.join(args.path, str(epoch)))
  
 def train(train_queue, model, model_params, criterion, optimizer, optimizer_alpha, optimizer_base, epoch):
     losses = utils.AverageMeter()
@@ -188,7 +191,7 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
                 "Train: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Spike Energy {spike_E:.3f}  Prec@(1,5) ({top1.avg:.1%}, {top5.avg:.1%})".format(
                     epoch + 1, args.epochs, step, len(train_queue) - 1, losses=losses, spike_E=spike_E.item(),
                     top1=top1, top5=top5))
-        if epoch >= args.warmup:
+        if epoch >= args.warmup and epoch < args.freeze:
             if step % args.print_freq == 0:
                 min_alpha, _ = utils.print_minimum_alpha(model, 1e6)
                 print('min_alpha', min_alpha, 'step', step)
@@ -197,7 +200,7 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
                 base, tmp_base, _ = utils.print_base_tmpbase(model, [], [])
                 base_grad, _ = utils.print_base_grad(model, [])
                 print('-----------------alpha-----------------')
-                for i in range(len(base)):
+                for i in range(len(alpha)):
                     print(alpha[i][0], alpha[i][1], alpha_grad[i][1])
                 print('-----------------base-----------------')
                 for i in range(len(base)):
@@ -205,6 +208,7 @@ def train(train_queue, model, model_params, criterion, optimizer, optimizer_alph
             
             if step != 0 and step % update_step == 0:
                 utils.update_base(model, update_step)
+        
     return top1.avg, losses.avg
 
 
@@ -229,6 +233,7 @@ def infer(valid_queue, model, criterion, epoch):
 
         if step % args.print_freq == 0:
             logger.info("Valid: [{:2d}/{}] Step {:03d}/{:03d} Loss {losses.avg:.3f} Final Prec@1 {top1.avg:.4%}".format(epoch+1, args.epochs, step, len(valid_queue) - 1, losses=losses, top1=top1))
+        
     return top1.avg, losses.avg
 
 
